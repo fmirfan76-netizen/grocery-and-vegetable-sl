@@ -1,0 +1,6 @@
+{
+  "name": "Matale Fresh Grocery & Vegetable Delivery",
+  "description": "Mobile-first grocery and fresh vegetable ordering platform for Matale, Sri Lanka with central admin, supplier-specific shopping lists, and order tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

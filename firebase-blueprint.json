@@ -1,0 +1,106 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Grocery or fresh vegetable product available for delivery in Matale",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the product" },
+        "name": { "type": "string", "description": "Display name in English", "maxLength": 100 },
+        "nameSi": { "type": "string", "description": "Sinhala name transliteration", "maxLength": 100 },
+        "nameTa": { "type": "string", "description": "Tamil name transliteration", "maxLength": 100 },
+        "category": { "type": "string", "description": "Category ID or name", "maxLength": 50 },
+        "supplierId": { "type": "string", "description": "Supplier ID: supermarket or vegetable_shop", "enum": ["supermarket", "vegetable_shop", "bakery", "other"] },
+        "price": { "type": "number", "description": "Customer selling price in LKR" },
+        "costPrice": { "type": "number", "description": "Estimated or actual purchase cost in LKR" },
+        "unit": { "type": "string", "description": "Unit of measurement (e.g. 1 kg, 500g, 250g, 1 packet, 1 bottle, 1 piece)", "maxLength": 30 },
+        "minQuantity": { "type": "number", "description": "Minimum order quantity" },
+        "step": { "type": "number", "description": "Quantity increment step" },
+        "inStock": { "type": "boolean", "description": "Whether the item is currently available" },
+        "imageUrl": { "type": "string", "description": "Optimized image URL", "maxLength": 500 },
+        "badge": { "type": "string", "description": "Promotional tag like Fresh Today, Best Seller, etc.", "maxLength": 50 },
+        "isPopular": { "type": "boolean", "description": "Featured on home page" },
+        "isOffer": { "type": "boolean", "description": "Discount or promotional offer" },
+        "offerPrice": { "type": "number", "description": "Discounted price in LKR if applicable" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
+      },
+      "required": ["id", "name", "category", "supplierId", "price", "unit", "inStock"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Partner store or market source in Matale",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique supplier ID (e.g. supermarket, vegetable_shop)" },
+        "name": { "type": "string", "description": "Supplier business name", "maxLength": 100 },
+        "type": { "type": "string", "description": "Type of merchant", "maxLength": 50 },
+        "location": { "type": "string", "description": "Location in Matale", "maxLength": 150 },
+        "contactPhone": { "type": "string", "description": "Contact phone number", "maxLength": 20 },
+        "notes": { "type": "string", "description": "Collection and logistics notes", "maxLength": 300 },
+        "isActive": { "type": "boolean", "description": "Whether active" }
+      },
+      "required": ["id", "name", "type", "location", "isActive"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer grocery and vegetable delivery order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique order ID such as MTL-2026-0001" },
+        "customerId": { "type": "string", "description": "Customer UID or anonymous session ID", "maxLength": 128 },
+        "customerName": { "type": "string", "description": "Full name of customer", "maxLength": 100 },
+        "phone": { "type": "string", "description": "Sri Lankan contact number (e.g. 077 123 4567)", "maxLength": 25 },
+        "deliveryAddress": { "type": "string", "description": "Street address or landmark", "maxLength": 250 },
+        "area": { "type": "string", "description": "Area in Matale district", "maxLength": 80 },
+        "deliveryInstructions": { "type": "string", "description": "Optional directions or gate instructions", "maxLength": 300 },
+        "orderNotes": { "type": "string", "description": "General customer order notes", "maxLength": 300 },
+        "substitutionPreference": { "type": "string", "description": "Preference when item is out of stock", "maxLength": 100 },
+        "paymentMethod": { "type": "string", "description": "Payment type (e.g. COD - Cash on Delivery)", "enum": ["cod", "bank_transfer"] },
+        "status": { "type": "string", "description": "Order lifecycle status", "enum": ["Pending", "Confirmed", "Shopping", "Packed", "Out for Delivery", "Delivered", "Cancelled"] },
+        "cancellationReason": { "type": "string", "description": "Reason if cancelled", "maxLength": 200 },
+        "itemCount": { "type": "number", "description": "Total number of items" },
+        "subtotal": { "type": "number", "description": "Estimated item subtotal in LKR" },
+        "deliveryFee": { "type": "number", "description": "Delivery fee in LKR" },
+        "totalAmount": { "type": "number", "description": "Estimated total order amount in LKR" },
+        "actualSubtotal": { "type": "number", "description": "Admin adjusted actual subtotal after weighting" },
+        "actualTotalAmount": { "type": "number", "description": "Final agreed bill amount in LKR" },
+        "totalPurchaseCost": { "type": "number", "description": "Actual cost paid to suppliers by admin" },
+        "deliveryExpense": { "type": "number", "description": "Actual rider/fuel cost" },
+        "items": { "type": "array", "description": "Ordered line items summary" },
+        "createdAt": { "type": "string", "description": "ISO creation date timestamp" },
+        "updatedAt": { "type": "string", "description": "ISO updated date timestamp" }
+      },
+      "required": ["id", "customerName", "phone", "deliveryAddress", "area", "status", "subtotal", "deliveryFee", "totalAmount", "paymentMethod", "createdAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Authorized administrator profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "User UID" },
+        "email": { "type": "string", "description": "Admin email", "maxLength": 100 },
+        "role": { "type": "string", "description": "User role", "enum": ["admin", "superadmin"] },
+        "createdAt": { "type": "string", "description": "Creation date" }
+      },
+      "required": ["uid", "email", "role"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Public product catalogue with supplier assignment and prices"
+    },
+    "/suppliers/{supplierId}": {
+      "schema": { "$ref": "#/entities/Supplier" },
+      "description": "Supplier partners in Matale"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer grocery orders tracked by central admin"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Authorized administrator registry"
+    }
+  }
+}

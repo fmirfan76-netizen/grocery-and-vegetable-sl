@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Products catalogue: Readable and manageable for Matale inventory
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isValidId(productId);
+    }
+
+    // Suppliers list: Readable for store collection points
+    match /suppliers/{supplierId} {
+      allow read: if true;
+      allow write: if isValidId(supplierId);
+    }
+
+    // Customer orders: Allows placing orders (Cash on Delivery & Bank Transfer), order tracking,
+    // and live synchronization with central admin dashboard across all devices
+    match /orders/{orderId} {
+      allow read: if true;
+      allow create, update: if isValidId(orderId);
+      allow delete: if isValidId(orderId);
+    }
+
+    // App & Business Settings (including Bank Accounts and WhatsApp configurations)
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // Admin registry
+    match /admins/{adminId} {
+      allow read, write: if true;
+    }
+  }
+}
