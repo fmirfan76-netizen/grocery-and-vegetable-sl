@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Minus, Check, AlertCircle } from 'lucide-react';
+import { Plus, Minus, AlertCircle, Flame, Tag } from 'lucide-react';
 import { Product } from '../../types';
 import { useCart } from '../../context/CartContext';
 import { formatLKR } from '../../utils/formatters';
@@ -16,12 +16,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, currentLang }
   const currentQuantity = cartItem ? cartItem.quantity : 0;
 
   const isVegetable = product.supplierId === 'vegetable_shop';
-  const effectivePrice = product.isOffer && product.offerPrice ? product.offerPrice : product.price;
+  const hasActiveOffer = Boolean(
+    product.isOffer && 
+    product.offerPrice && 
+    product.offerPrice < product.price
+  );
+  const effectivePrice = hasActiveOffer && product.offerPrice ? product.offerPrice : product.price;
+  const savings = hasActiveOffer ? product.price - effectivePrice : 0;
+  const discountPercent = hasActiveOffer ? Math.round((savings / product.price) * 100) : 0;
 
   return (
-    <div className={`group flex flex-col bg-white rounded-2xl border transition-all duration-200 overflow-hidden ${
+    <div className={`group flex flex-col bg-white rounded-2xl border transition-all duration-200 overflow-hidden relative ${
       !product.inStock 
         ? 'opacity-60 border-gray-200' 
+        : hasActiveOffer
+        ? 'border-amber-300/80 hover:border-amber-500 hover:shadow-xl hover:shadow-amber-500/10 ring-1 ring-amber-400/20'
         : 'border-emerald-100/80 hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-900/5'
     }`}>
       {/* Product Image & Badges Container */}
@@ -32,7 +41,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, currentLang }
           loading="lazy"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => {
-            // High-reliability SVG produce fallback
             (e.target as HTMLImageElement).src =
               'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80';
           }}
@@ -47,12 +55,25 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, currentLang }
           }`}>
             {isVegetable ? '🥦 Market Pola' : '🛒 Supermarket'}
           </span>
-          {product.badge && (
+          {product.badge && !hasActiveOffer && (
             <span className="inline-flex items-center text-[9px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-400 text-emerald-950 shadow-xs">
               {product.badge}
             </span>
           )}
         </div>
+
+        {/* Special / Weekly Offer Badge */}
+        {hasActiveOffer && (
+          <div className="absolute top-2.5 right-2.5 flex flex-col items-end gap-1 z-10">
+            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 via-rose-500 to-red-600 text-white shadow-md animate-pulse">
+              <Flame className="w-3 h-3 fill-amber-200 text-amber-200" />
+              <span>{product.offerLabel || 'Weekly Offer'}</span>
+            </span>
+            <span className="inline-flex items-center text-[9px] font-black px-1.5 py-0.2 rounded-md bg-rose-900/90 text-rose-100 backdrop-blur-xs border border-rose-400/40 shadow-xs">
+              Save {discountPercent}%
+            </span>
+          </div>
+        )}
 
         {/* Out of Stock Overlay */}
         {!product.inStock && (
@@ -94,15 +115,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, currentLang }
         {/* Pricing and Cart Buttons */}
         <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between gap-2">
           <div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-base font-extrabold text-emerald-900">
+            <div className="flex items-baseline gap-1.5">
+              <span className={`text-base font-extrabold ${hasActiveOffer ? 'text-rose-700' : 'text-emerald-900'}`}>
                 {formatLKR(effectivePrice)}
               </span>
+              {hasActiveOffer && (
+                <span className="text-[11px] text-gray-400 line-through">
+                  {formatLKR(product.price)}
+                </span>
+              )}
             </div>
-            {product.isOffer && product.price > effectivePrice && (
-              <span className="text-[10px] text-gray-400 line-through">
-                {formatLKR(product.price)}
-              </span>
+            {hasActiveOffer && (
+              <div className="text-[10px] font-bold text-emerald-700 flex items-center gap-0.5 mt-0.5">
+                <Tag className="w-2.5 h-2.5" />
+                <span>Save {formatLKR(savings)}</span>
+              </div>
             )}
           </div>
 
@@ -134,7 +161,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, currentLang }
               <button
                 type="button"
                 onClick={() => addToCart(product, product.minQuantity || 1)}
-                className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-all shadow-xs active:scale-95 hover:shadow-md hover:shadow-emerald-700/10"
+                className={`flex items-center gap-1 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-all shadow-xs active:scale-95 ${
+                  hasActiveOffer
+                    ? 'bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-700 hover:to-rose-700 hover:shadow-md hover:shadow-rose-600/20'
+                    : 'bg-emerald-600 hover:bg-emerald-700 hover:shadow-md hover:shadow-emerald-700/10'
+                }`}
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add</span>

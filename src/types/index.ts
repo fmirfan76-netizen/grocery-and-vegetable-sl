@@ -38,6 +38,7 @@ export interface Product {
   isPopular?: boolean;
   isOffer?: boolean;
   offerPrice?: number;
+  offerLabel?: string;
   origin?: string;
 }
 

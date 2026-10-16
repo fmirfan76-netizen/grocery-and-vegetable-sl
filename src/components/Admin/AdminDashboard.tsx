@@ -27,7 +27,10 @@ import {
   Volume2,
   ExternalLink,
   Building2,
-  CreditCard
+  CreditCard,
+  Flame,
+  Tag,
+  Percent
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Order, OrderStatus, Product, Supplier, SupplierId } from '../../types';
@@ -432,12 +435,18 @@ export const AdminDashboard: React.FC = () => {
 
   // Filtered products
   const filteredProducts = products.filter((p) => {
+    const q = productSearch.toLowerCase().trim();
     const matchesSearch =
-      p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-      p.nameSi.toLowerCase().includes(productSearch.toLowerCase()) ||
-      p.nameTa.toLowerCase().includes(productSearch.toLowerCase());
+      !q ||
+      p.name.toLowerCase().includes(q) ||
+      (p.nameSi && p.nameSi.toLowerCase().includes(q)) ||
+      (p.nameTa && p.nameTa.toLowerCase().includes(q)) ||
+      (p.offerLabel && p.offerLabel.toLowerCase().includes(q)) ||
+      (p.badge && p.badge.toLowerCase().includes(q));
+
     const matchesCategory =
       productCategoryFilter === 'all' ||
+      (productCategoryFilter === 'offers' && p.isOffer && p.offerPrice && p.offerPrice < p.price) ||
       p.supplierId === productCategoryFilter ||
       p.category === productCategoryFilter;
     return matchesSearch && matchesCategory;
@@ -1134,7 +1143,10 @@ export const AdminDashboard: React.FC = () => {
                 onChange={(e) => setProductCategoryFilter(e.target.value)}
                 className="text-xs py-2 px-3 border border-gray-200 rounded-xl bg-gray-50/50 font-medium"
               >
-                <option value="all">All Suppliers & Categories</option>
+                <option value="all">All Items ({products.length})</option>
+                <option value="offers">
+                  🔥 Special Prices & Weekly Offers ({products.filter((p) => p.isOffer && p.offerPrice && p.offerPrice < p.price).length})
+                </option>
                 <option value="vegetable_shop">🥦 Vegetable Shop Only</option>
                 <option value="supermarket">🛒 Supermarket Only</option>
               </select>
@@ -1170,7 +1182,10 @@ export const AdminDashboard: React.FC = () => {
                       step: 1,
                       inStock: true,
                       imageUrl: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80',
-                      badge: 'New Item',
+                      badge: 'Weekly Offer',
+                      isOffer: false,
+                      offerPrice: 0,
+                      offerLabel: 'Weekly Offer',
                     });
                     setIsAddingProduct(true);
                   }}
@@ -1193,6 +1208,7 @@ export const AdminDashboard: React.FC = () => {
                       <th className="p-3 font-bold">Supplier</th>
                       <th className="p-3 font-bold">Unit</th>
                       <th className="p-3 font-bold text-right">Selling Price</th>
+                      <th className="p-3 font-bold text-center">Weekly / Special Offer</th>
                       <th className="p-3 font-bold text-right">Purchase Cost</th>
                       <th className="p-3 font-bold text-center">In Stock</th>
                       <th className="p-3 font-bold text-center">Actions</th>
@@ -1226,8 +1242,63 @@ export const AdminDashboard: React.FC = () => {
                           </span>
                         </td>
                         <td className="p-3 text-gray-600">{p.unit}</td>
-                        <td className="p-3 text-right font-extrabold text-emerald-950">
-                          {formatLKR(p.price)}
+                        <td className="p-3 text-right">
+                          {p.isOffer && p.offerPrice && p.offerPrice < p.price ? (
+                            <div>
+                              <span className="font-extrabold text-rose-700 text-xs block">
+                                {formatLKR(p.offerPrice)}
+                              </span>
+                              <span className="text-[10px] text-gray-400 line-through">
+                                {formatLKR(p.price)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="font-extrabold text-emerald-950">
+                              {formatLKR(p.price)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-center">
+                          {p.isOffer && p.offerPrice && p.offerPrice < p.price ? (
+                            <div className="inline-flex flex-col items-center">
+                              <button
+                                onClick={async () => {
+                                  const updated = { ...p, isOffer: false };
+                                  await saveProduct(updated);
+                                  setProducts(products.map((item) => (item.id === p.id ? updated : item)));
+                                  showNotification(`Offer deactivated for ${p.name}`);
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-rose-600 text-white text-[10px] font-black shadow-xs hover:opacity-90 transition-opacity"
+                                title="Click to disable offer"
+                              >
+                                <Flame className="w-3 h-3 fill-amber-200 text-amber-200" />
+                                <span>{p.offerLabel || 'Weekly Offer'}</span>
+                              </button>
+                              <span className="text-[9px] text-emerald-700 font-bold mt-0.5">
+                                Save {formatLKR(p.price - p.offerPrice)} (-{Math.round(((p.price - p.offerPrice) / p.price) * 100)}%)
+                              </span>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={async () => {
+                                const defaultOffer = Math.round(p.price * 0.85); // 15% discount default
+                                const updated = {
+                                  ...p,
+                                  isOffer: true,
+                                  offerPrice: defaultOffer,
+                                  offerLabel: 'Weekly Offer',
+                                  badge: 'Weekly Offer'
+                                };
+                                await saveProduct(updated);
+                                setProducts(products.map((item) => (item.id === p.id ? updated : item)));
+                                showNotification(`Weekly Offer activated at ${formatLKR(defaultOffer)} for ${p.name}`);
+                              }}
+                              className="px-2 py-1 rounded-lg bg-gray-100 hover:bg-amber-100 text-gray-600 hover:text-amber-900 border border-gray-200 text-[10px] font-bold transition-colors"
+                              title="1-tap enable weekly offer"
+                            >
+                              + Set Offer
+                            </button>
+                          )}
                         </td>
                         <td className="p-3 text-right font-mono text-gray-600">
                           {formatLKR(p.costPrice)}
@@ -2005,6 +2076,108 @@ export const AdminDashboard: React.FC = () => {
                     className="w-full p-2 border border-gray-200 rounded-xl font-bold"
                   />
                 </div>
+              </div>
+
+              {/* Special Price & Weekly Offer Setup */}
+              <div className="p-3.5 bg-amber-50/80 rounded-2xl border border-amber-200/90 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Flame className="w-4 h-4 text-amber-600 fill-amber-500" />
+                    <span className="font-extrabold text-gray-900 text-xs">
+                      Special Price / Weekly Offer
+                    </span>
+                  </div>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-amber-950">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editingProduct.isOffer)}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        const defaultOffer = (!editingProduct.offerPrice || editingProduct.offerPrice === 0)
+                          ? Math.round(editingProduct.price * 0.85)
+                          : editingProduct.offerPrice;
+                        setEditingProduct({
+                          ...editingProduct,
+                          isOffer: isChecked,
+                          offerPrice: isChecked ? defaultOffer : editingProduct.offerPrice,
+                          offerLabel: editingProduct.offerLabel || 'Weekly Offer',
+                          badge: isChecked ? (editingProduct.offerLabel || 'Weekly Offer') : editingProduct.badge
+                        });
+                      }}
+                      className="w-4 h-4 text-amber-600 rounded"
+                    />
+                    <span>Activate Offer</span>
+                  </label>
+                </div>
+
+                {editingProduct.isOffer && (
+                  <div className="space-y-2.5 pt-2 border-t border-amber-200">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="font-bold text-gray-700 block mb-1">
+                          Offer Badge / Type
+                        </label>
+                        <select
+                          value={editingProduct.offerLabel || 'Weekly Offer'}
+                          onChange={(e) =>
+                            setEditingProduct({
+                              ...editingProduct,
+                              offerLabel: e.target.value,
+                              badge: e.target.value,
+                            })
+                          }
+                          className="w-full p-2 border border-amber-300 rounded-xl bg-white font-medium text-xs focus:border-amber-500 focus:outline-hidden"
+                        >
+                          <option value="Weekly Offer">🔥 Weekly Offer</option>
+                          <option value="Special Price">⚡ Special Price</option>
+                          <option value="Weekend Deal">🎉 Weekend Deal</option>
+                          <option value="Pola Fresh Deal">🥦 Pola Fresh Deal</option>
+                          <option value="Super Saver">🛒 Super Saver</option>
+                          <option value="Flash Sale">💥 Flash Sale</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="font-bold text-gray-700 block mb-1">
+                          Offer Price (Rs.) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          value={editingProduct.offerPrice || ''}
+                          onChange={(e) =>
+                            setEditingProduct({
+                              ...editingProduct,
+                              offerPrice: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          placeholder="e.g. 280"
+                          className="w-full p-2 border border-amber-400 rounded-xl font-bold bg-white text-xs focus:border-amber-600 focus:outline-hidden text-rose-700"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Instant Savings Feedback */}
+                    {editingProduct.offerPrice && editingProduct.offerPrice > 0 ? (
+                      editingProduct.offerPrice < editingProduct.price ? (
+                        <div className="p-2 bg-emerald-50 rounded-xl border border-emerald-200 text-[11px] text-emerald-900 flex items-center justify-between">
+                          <span className="font-medium">
+                            Regular: <strong>{formatLKR(editingProduct.price)}</strong> → Offer: <strong>{formatLKR(editingProduct.offerPrice)}</strong>
+                          </span>
+                          <span className="font-extrabold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-300">
+                            Customer saves {formatLKR(editingProduct.price - editingProduct.offerPrice)} (-{Math.round(((editingProduct.price - editingProduct.offerPrice) / editingProduct.price) * 100)}%)
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="p-2 bg-rose-50 rounded-xl border border-rose-200 text-[11px] text-rose-800 font-bold">
+                          ⚠️ Offer price ({formatLKR(editingProduct.offerPrice)}) should be lower than regular price ({formatLKR(editingProduct.price)}) to show savings.
+                        </div>
+                      )
+                    ) : (
+                      <p className="text-[11px] text-amber-800">
+                        Enter the discounted price customers will pay for this item during the offer period.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>
