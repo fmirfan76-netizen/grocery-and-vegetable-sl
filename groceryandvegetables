@@ -1,0 +1,10 @@
+{
+  // ...
+  "d1_databases": [
+    {
+      "binding": "groceryandvegetables",
+      "database_id": "029c30a4-f824-4ad1-bc3f-3b88fdb81e9c"
+    }
+  ],
+  // ...
+}
