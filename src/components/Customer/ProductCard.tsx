@@ -1,6 +1,6 @@
 import React from 'react';
 import { Plus, Minus, AlertCircle, Flame, Tag } from 'lucide-react';
-import { Product } from '../../types';
+import { Product, getProductDivision } from '../../types';
 import { useCart } from '../../context/CartContext';
 import { formatLKR } from '../../utils/formatters';
 import { SupportedLanguage } from '../../utils/i18n';
@@ -15,7 +15,24 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, currentLang }
   const cartItem = items.find((i) => i.product.id === product.id);
   const currentQuantity = cartItem ? cartItem.quantity : 0;
 
-  const isVegetable = product.supplierId === 'vegetable_shop';
+  const division = getProductDivision(product.category);
+
+  const getDivisionBadge = () => {
+    switch (division) {
+      case 'vegetables':
+        return { label: '🥦 Vegetables', bg: 'bg-emerald-700 text-white' };
+      case 'fruits':
+        return { label: '🍎 Fruits', bg: 'bg-amber-600 text-white' };
+      case 'meat':
+        return { label: '🍗 Chicken & Fish', bg: 'bg-rose-700 text-white' };
+      case 'groceries':
+      default:
+        return { label: '🛒 Groceries', bg: 'bg-blue-700 text-white' };
+    }
+  };
+
+  const badgeInfo = getDivisionBadge();
+
   const hasActiveOffer = Boolean(
     product.isOffer && 
     product.offerPrice && 
@@ -46,14 +63,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, currentLang }
           }}
         />
 
-        {/* Supplier Category Badge */}
+        {/* Division Department Badge */}
         <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10">
-          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs ${
-            isVegetable 
-              ? 'bg-emerald-600 text-white' 
-              : 'bg-blue-600 text-white'
-          }`}>
-            {isVegetable ? '🥦 Market Pola' : '🛒 Supermarket'}
+          <span className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow-xs ${badgeInfo.bg}`}>
+            {badgeInfo.label}
           </span>
           {product.badge && !hasActiveOffer && (
             <span className="inline-flex items-center text-[9px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-400 text-emerald-950 shadow-xs">

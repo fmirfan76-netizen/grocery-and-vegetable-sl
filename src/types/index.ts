@@ -1,4 +1,4 @@
-export type SupplierId = 'vegetable_shop' | 'supermarket' | string;
+export type SupplierId = 'vegetable_shop' | 'supermarket' | 'meat_shop' | 'fruit_stall' | string;
 
 export interface Supplier {
   id: SupplierId;
@@ -10,15 +10,26 @@ export interface Supplier {
   isActive: boolean;
 }
 
+export type ProductDivision = 'vegetables' | 'fruits' | 'meat' | 'groceries';
+
 export type ProductCategory = 
   | 'vegetables' 
   | 'fruits' 
+  | 'meat'
+  | 'groceries'
   | 'greens' 
   | 'supermarket_staples' 
   | 'dairy_beverages' 
   | 'snacks_bakery' 
-  | 'spices_condiments'
+  | 'spices_condiments' 
   | 'household';
+
+export function getProductDivision(category: ProductCategory | string): ProductDivision {
+  if (category === 'vegetables' || category === 'greens') return 'vegetables';
+  if (category === 'fruits') return 'fruits';
+  if (category === 'meat' || category === 'poultry' || category === 'fish') return 'meat';
+  return 'groceries';
+}
 
 export interface Product {
   id: string;

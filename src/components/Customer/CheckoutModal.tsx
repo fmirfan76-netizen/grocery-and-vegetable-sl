@@ -31,6 +31,7 @@ import {
   getAdminWhatsAppUrl 
 } from '../../utils/bankAndWhatsApp';
 import { Order } from '../../types';
+import { logoImage } from '../Logo';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -197,15 +198,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden z-10 animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="px-6 py-4.5 bg-gradient-to-r from-emerald-800 to-teal-900 text-white flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-black tracking-tight">
-              {confirmedOrder ? 'Order Confirmed!' : 'Checkout & Delivery Details'}
-            </h2>
-            <p className="text-xs text-emerald-200">
-              {confirmedOrder
-                ? 'Your order has been recorded in the central system'
-                : 'Matale Delivery • Cash on Delivery & Bank Transfer'}
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white p-0.5 shrink-0 overflow-hidden shadow-xs">
+              <img src={logoImage} alt="Matale Fresh" className="w-full h-full object-cover rounded-lg" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black tracking-tight leading-tight">
+                {confirmedOrder ? 'Order Confirmed!' : 'Checkout & Delivery Details'}
+              </h2>
+              <p className="text-xs text-emerald-200">
+                {confirmedOrder
+                  ? 'Your order has been recorded in the central system'
+                  : 'Matale Delivery • Cash on Delivery & Bank Transfer'}
+              </p>
+            </div>
           </div>
           <button
             onClick={() => {

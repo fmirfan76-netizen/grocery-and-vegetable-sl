@@ -19,7 +19,21 @@ export async function fetchSuppliers(): Promise<Supplier[]> {
     snapshot.forEach((snap) => {
       suppliers.push(snap.data() as Supplier);
     });
-    return suppliers;
+
+    // Ensure newly defined suppliers (fruit_stall, meat_shop) are available in DB
+    const existingIds = new Set(suppliers.map((s) => s.id));
+    for (const sup of INITIAL_SUPPLIERS) {
+      if (!existingIds.has(sup.id)) {
+        try {
+          await setDoc(doc(db, SUPPLIERS_COLLECTION, sup.id), sup, { merge: true });
+          suppliers.push(sup);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    return suppliers.length > 0 ? suppliers : INITIAL_SUPPLIERS;
   } catch (error) {
     console.warn('Falling back to local suppliers list:', error);
     return INITIAL_SUPPLIERS;

@@ -33,7 +33,8 @@ import {
   Percent
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { Order, OrderStatus, Product, Supplier, SupplierId } from '../../types';
+import { Logo, logoImage } from '../Logo';
+import { Order, OrderStatus, Product, Supplier, SupplierId, getProductDivision } from '../../types';
 import { 
   subscribeToOrders, 
   updateOrderStatus, 
@@ -447,6 +448,10 @@ export const AdminDashboard: React.FC = () => {
     const matchesCategory =
       productCategoryFilter === 'all' ||
       (productCategoryFilter === 'offers' && p.isOffer && p.offerPrice && p.offerPrice < p.price) ||
+      (productCategoryFilter === 'vegetables' && getProductDivision(p.category) === 'vegetables') ||
+      (productCategoryFilter === 'fruits' && getProductDivision(p.category) === 'fruits') ||
+      (productCategoryFilter === 'meat' && getProductDivision(p.category) === 'meat') ||
+      (productCategoryFilter === 'groceries' && getProductDivision(p.category) === 'groceries') ||
       p.supplierId === productCategoryFilter ||
       p.category === productCategoryFilter;
     return matchesSearch && matchesCategory;
@@ -466,11 +471,11 @@ export const AdminDashboard: React.FC = () => {
     return (
       <div className="min-h-[80vh] flex items-center justify-center p-4 bg-gray-50">
         <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-gray-200/80 p-8 space-y-6 text-center animate-in zoom-in-95 duration-200">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto text-3xl shadow-xs">
-            🔒
+          <div className="flex justify-center">
+            <Logo size="lg" />
           </div>
           <div>
-            <h2 className="text-xl font-black text-gray-950">Matale Admin Portal</h2>
+            <h2 className="text-xl font-black text-gray-950">Store Operations Portal</h2>
             <p className="text-xs text-rose-600 font-bold mt-1">
               Access Restricted — Authorized Administrator Only
             </p>
@@ -613,13 +618,18 @@ export const AdminDashboard: React.FC = () => {
 
         {/* Dashboard Top Title & Metric Overview */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-black text-gray-950 tracking-tight">
-              Central Order & Supplier Manager
-            </h1>
-            <p className="text-xs text-gray-500">
-              Collect from Matale Pola & Supermarket • Combined Delivery Logistics
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-white p-1 border border-gray-200 shadow-xs shrink-0 overflow-hidden">
+              <img src={logoImage} alt="Matale Fresh" className="w-full h-full object-cover rounded-xl" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-black text-gray-950 tracking-tight">
+                Central Order & Supplier Manager
+              </h1>
+              <p className="text-xs text-gray-500">
+                Collect from Matale Pola & Supermarket • Combined Delivery Logistics
+              </p>
+            </div>
           </div>
 
           {/* Tab Navigation Buttons */}
@@ -1030,7 +1040,7 @@ export const AdminDashboard: React.FC = () => {
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    <span>{sup.id === 'vegetable_shop' ? '🥦' : '🛒'}</span>
+                    <span>{sup.id === 'vegetable_shop' ? '🥦' : sup.id === 'fruit_stall' ? '🍎' : sup.id === 'meat_shop' ? '🍗' : '🛒'}</span>
                     <span>{sup.name}</span>
                   </button>
                 ))}
@@ -1143,12 +1153,14 @@ export const AdminDashboard: React.FC = () => {
                 onChange={(e) => setProductCategoryFilter(e.target.value)}
                 className="text-xs py-2 px-3 border border-gray-200 rounded-xl bg-gray-50/50 font-medium"
               >
-                <option value="all">All Items ({products.length})</option>
+                <option value="all">All Departments ({products.length})</option>
                 <option value="offers">
-                  🔥 Special Prices & Weekly Offers ({products.filter((p) => p.isOffer && p.offerPrice && p.offerPrice < p.price).length})
+                  🔥 Special & Weekly Offers ({products.filter((p) => p.isOffer && p.offerPrice && p.offerPrice < p.price).length})
                 </option>
-                <option value="vegetable_shop">🥦 Vegetable Shop Only</option>
-                <option value="supermarket">🛒 Supermarket Only</option>
+                <option value="vegetables">🥦 Vegetables ({products.filter((p) => getProductDivision(p.category) === 'vegetables').length})</option>
+                <option value="fruits">🍎 Fruits ({products.filter((p) => getProductDivision(p.category) === 'fruits').length})</option>
+                <option value="meat">🍗 Chicken & Fish ({products.filter((p) => getProductDivision(p.category) === 'meat').length})</option>
+                <option value="groceries">🛒 Groceries ({products.filter((p) => getProductDivision(p.category) === 'groceries').length})</option>
               </select>
 
               <div className="flex items-center gap-2">
@@ -1231,15 +1243,35 @@ export const AdminDashboard: React.FC = () => {
                           </div>
                         </td>
                         <td className="p-3">
-                          <span
-                            className={`text-[9px] font-bold px-2 py-0.5 rounded ${
-                              p.supplierId === 'vegetable_shop'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-blue-100 text-blue-800'
-                            }`}
-                          >
-                            {p.supplierId === 'vegetable_shop' ? '🥦 Market Pola' : '🛒 Supermarket'}
-                          </span>
+                          {(() => {
+                            const div = getProductDivision(p.category);
+                            if (div === 'vegetables') {
+                              return (
+                                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                  🥦 Vegetables
+                                </span>
+                              );
+                            }
+                            if (div === 'fruits') {
+                              return (
+                                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900">
+                                  🍎 Fruits
+                                </span>
+                              );
+                            }
+                            if (div === 'meat') {
+                              return (
+                                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-800">
+                                  🍗 Chicken & Fish
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+                                🛒 Groceries
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="p-3 text-gray-600">{p.unit}</td>
                         <td className="p-3 text-right">
@@ -2020,6 +2052,36 @@ export const AdminDashboard: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
+                  <label className="font-bold text-gray-700 block mb-1">Department / Category</label>
+                  <select
+                    value={editingProduct.category}
+                    onChange={(e) => {
+                      const newCat = e.target.value as any;
+                      let recommendedSup = editingProduct.supplierId;
+                      if (newCat === 'vegetables' || newCat === 'greens') recommendedSup = 'vegetable_shop';
+                      else if (newCat === 'fruits') recommendedSup = 'fruit_stall';
+                      else if (newCat === 'meat') recommendedSup = 'meat_shop';
+                      else recommendedSup = 'supermarket';
+                      setEditingProduct({
+                        ...editingProduct,
+                        category: newCat,
+                        supplierId: recommendedSup,
+                      });
+                    }}
+                    className="w-full p-2 border border-gray-200 rounded-xl font-bold bg-white"
+                  >
+                    <option value="vegetables">🥦 Vegetables (Pola Harvest)</option>
+                    <option value="fruits">🍎 Fruits (Tropical & Highland)</option>
+                    <option value="meat">🍗 Chicken, Fish & Eggs (Halal)</option>
+                    <option value="supermarket_staples">🛒 Groceries (Rice, Dhal, Staples)</option>
+                    <option value="dairy_beverages">🥛 Dairy & Beverages (Milk, Tea)</option>
+                    <option value="spices_condiments">🌶️ Spices (Curry & Chili Powder)</option>
+                    <option value="greens">🌿 Leafy Greens & Herbs</option>
+                    <option value="snacks_bakery">🍪 Biscuits & Instant Noodles</option>
+                    <option value="household">🧼 Household Essentials</option>
+                  </select>
+                </div>
+                <div>
                   <label className="font-bold text-gray-700 block mb-1">Supplier Assignment</label>
                   <select
                     value={editingProduct.supplierId}
@@ -2029,22 +2091,25 @@ export const AdminDashboard: React.FC = () => {
                         supplierId: e.target.value as SupplierId,
                       })
                     }
-                    className="w-full p-2 border border-gray-200 rounded-xl"
+                    className="w-full p-2 border border-gray-200 rounded-xl font-bold bg-white"
                   >
-                    <option value="vegetable_shop">🥦 Vegetable Shop (Pola)</option>
+                    <option value="vegetable_shop">🥦 Pola Vegetable Stall #14</option>
+                    <option value="fruit_stall">🍎 Fruit Market Stall #22</option>
+                    <option value="meat_shop">🍗 Fresh Poultry, Eggs & Seafood Stall #08</option>
                     <option value="supermarket">🛒 Supermarket Partner</option>
                   </select>
                 </div>
-                <div>
-                  <label className="font-bold text-gray-700 block mb-1">Unit of Measure</label>
-                  <input
-                    type="text"
-                    value={editingProduct.unit}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, unit: e.target.value })}
-                    placeholder="e.g. 500g, 1 kg, 1 piece"
-                    className="w-full p-2 border border-gray-200 rounded-xl"
-                  />
-                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-gray-700 block mb-1">Unit of Measure</label>
+                <input
+                  type="text"
+                  value={editingProduct.unit}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, unit: e.target.value })}
+                  placeholder="e.g. 500g, 1 kg, 1 piece, 1 bunch"
+                  className="w-full p-2 border border-gray-200 rounded-xl"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-2">

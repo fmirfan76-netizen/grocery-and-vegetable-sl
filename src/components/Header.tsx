@@ -3,6 +3,7 @@ import { ShoppingBag, ShieldCheck, MapPin, Globe, PackageCheck, Lock } from 'luc
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { SupportedLanguage, TRANSLATIONS } from '../utils/i18n';
+import { Logo } from './Logo';
 
 interface HeaderProps {
   currentLang: SupportedLanguage;
@@ -81,22 +82,7 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={() => { if (isAdminView) onToggleAdmin(); }}
           className="flex items-center gap-2.5 cursor-pointer group"
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white shadow-md shadow-emerald-700/20 group-hover:scale-105 transition-transform">
-            <span className="text-xl">🥬</span>
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-lg sm:text-xl tracking-tight text-gray-900 group-hover:text-emerald-700 transition-colors">
-                Matale Fresh
-              </span>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                SL
-              </span>
-            </div>
-            <p className="text-[11px] text-gray-500 font-medium leading-none -mt-0.5">
-              මාතලේ එළවළු & සුපර්මාකට්
-            </p>
-          </div>
+          <Logo size="md" />
         </div>
 
         {/* Right Action Icons */}
@@ -111,8 +97,8 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="hidden md:inline">{t.trackOrder}</span>
           </button>
 
-          {/* Admin Access Button - Secured for Admin Only */}
-          {isAdmin ? (
+          {/* Admin Hub Switcher - ONLY visible to verified Admin (Never shown to customers) */}
+          {isAdmin && (
             <button
               onClick={onToggleAdmin}
               className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl transition-all border cursor-pointer ${
@@ -120,6 +106,7 @@ export const Header: React.FC<HeaderProps> = ({
                   ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm'
                   : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border-emerald-200'
               }`}
+              title="Switch between Shop and Admin Hub"
             >
               <ShieldCheck className="w-4 h-4" />
               <span>{isAdminView ? 'Customer Shop' : 'Admin Hub'}</span>
@@ -128,15 +115,6 @@ export const Header: React.FC<HeaderProps> = ({
                   {pendingOrdersCount}
                 </span>
               )}
-            </button>
-          ) : (
-            <button
-              onClick={onToggleAdmin}
-              className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-emerald-800 hover:bg-emerald-50 px-2.5 py-2 rounded-xl transition-colors border border-transparent hover:border-emerald-200 cursor-pointer"
-              title="Admin Portal (Restricted to fmirfan76@gmail.com)"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Admin Portal</span>
             </button>
           )}
 

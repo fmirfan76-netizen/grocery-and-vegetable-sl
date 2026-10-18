@@ -14,10 +14,14 @@ import { Product, Order } from './types';
 import { SupportedLanguage } from './utils/i18n';
 import { ArrowRight, Lock, Phone } from 'lucide-react';
 import { subscribeToAdminWhatsApp, getAdminWhatsAppNumber } from './utils/bankAndWhatsApp';
+import { Logo } from './components/Logo';
+import { AdminLoginModal } from './components/Admin/AdminLoginModal';
 
 function AppContent() {
   const [currentLang, setCurrentLang] = useState<SupportedLanguage>('en');
   const [isAdminView, setIsAdminView] = useState<boolean>(false);
+  const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState<boolean>(false);
+  const [secretClickCount, setSecretClickCount] = useState<number>(0);
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState<boolean>(false);
   const [isTrackingOpen, setIsTrackingOpen] = useState<boolean>(false);
@@ -52,6 +56,44 @@ function AppContent() {
       if (unsubWa) unsubWa();
     };
   }, []);
+
+  // Check for admin trigger via URL param (?admin or #admin) or key shortcut (Ctrl+Shift+A)
+  useEffect(() => {
+    const checkUrl = () => {
+      const search = window.location.search.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      if (search.includes('admin') || hash.includes('admin')) {
+        if (isAdmin) {
+          setIsAdminView(true);
+        } else {
+          setIsAdminLoginModalOpen(true);
+        }
+      }
+    };
+    checkUrl();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+Shift+A or Cmd+Shift+A secret admin shortcut
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        e.preventDefault();
+        if (isAdmin) {
+          setIsAdminView((prev) => !prev);
+        } else {
+          setIsAdminLoginModalOpen(true);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isAdmin]);
+
+  // Keep admin view strictly in sync with auth state: non-admins cannot stay in admin view
+  useEffect(() => {
+    if (!isAdmin && isAdminView) {
+      setIsAdminView(false);
+    }
+  }, [isAdmin, isAdminView]);
 
   // Only subscribe to orders if authenticated as admin to maintain pending count
   useEffect(() => {
@@ -89,7 +131,13 @@ function AppContent() {
           setTrackingOrderId(newlyCreatedOrder?.id || '');
           setIsTrackingOpen(true);
         }}
-        onToggleAdmin={() => setIsAdminView(!isAdminView)}
+        onToggleAdmin={() => {
+          if (isAdmin) {
+            setIsAdminView(!isAdminView);
+          } else {
+            setIsAdminLoginModalOpen(true);
+          }
+        }}
         isAdminView={isAdminView}
         pendingOrdersCount={pendingOrdersCount}
       />
@@ -136,7 +184,7 @@ function AppContent() {
 
       {/* Main View Router: Customer Shop vs Administrator Dashboard */}
       <main className="flex-1">
-        {isAdminView ? (
+        {isAdminView && isAdmin ? (
           <AdminDashboard />
         ) : (
           <CustomerHome
@@ -155,11 +203,8 @@ function AppContent() {
       <footer className="bg-emerald-950 text-white border-t border-emerald-900 mt-auto text-xs py-8 px-4">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">🥬</span>
-              <span className="font-black text-base">Matale Fresh</span>
-            </div>
-            <p className="text-emerald-300 text-[11px]">
+            <Logo size="sm" textColor="text-white" subtextColor="text-emerald-300" />
+            <p className="text-emerald-300 text-[11px] pt-1">
               Central market fresh vegetable & supermarket grocery delivery service serving Matale, Sri Lanka.
             </p>
             <p className="text-[10px] text-emerald-400">
@@ -200,17 +245,39 @@ function AppContent() {
 
         <div className="max-w-7xl mx-auto pt-6 mt-6 border-t border-emerald-900 flex flex-col sm:flex-row items-center justify-between gap-3 text-[10px] text-emerald-400">
           <div>
-            © {new Date().getFullYear()} Matale Fresh Delivery. Serving Matale, Central Province, Sri Lanka.
-          </div>
-          <div>
-            <button
-              onClick={() => setIsAdminView(!isAdminView)}
-              className="flex items-center gap-1 text-emerald-400 hover:text-white transition-colors cursor-pointer"
+            <span
+              onClick={() => {
+                const newCount = secretClickCount + 1;
+                setSecretClickCount(newCount);
+                if (newCount >= 5) {
+                  setSecretClickCount(0);
+                  if (isAdmin) {
+                    setIsAdminView((v) => !v);
+                  } else {
+                    setIsAdminLoginModalOpen(true);
+                  }
+                }
+              }}
+              className="cursor-default select-none"
+              title=""
             >
-              <Lock className="w-3 h-3" />
-              <span>{isAdminView ? 'Return to Customer Shop' : 'Store Administrator Access'}</span>
-            </button>
+              ©
+            </span>{' '}
+            {new Date().getFullYear()} Matale Fresh Delivery. Serving Matale, Central Province, Sri Lanka.
           </div>
+
+          {/* Admin toggle ONLY rendered if authenticated as admin (hidden completely from customers) */}
+          {isAdmin && (
+            <div>
+              <button
+                onClick={() => setIsAdminView(!isAdminView)}
+                className="flex items-center gap-1.5 text-emerald-300 hover:text-white transition-colors cursor-pointer text-[11px] font-semibold bg-emerald-900/60 px-2.5 py-1 rounded-lg border border-emerald-800"
+              >
+                <Lock className="w-3 h-3 text-amber-400" />
+                <span>{isAdminView ? 'Switch to Customer Shop' : 'Open Admin Hub'}</span>
+              </button>
+            </div>
+          )}
         </div>
       </footer>
 
@@ -235,6 +302,16 @@ function AppContent() {
         isOpen={isTrackingOpen}
         onClose={() => setIsTrackingOpen(false)}
         initialOrderId={trackingOrderId}
+      />
+
+      {/* Discrete Administrator Login Modal (Never linked visibly to customers) */}
+      <AdminLoginModal
+        isOpen={isAdminLoginModalOpen}
+        onClose={() => setIsAdminLoginModalOpen(false)}
+        onSuccess={() => {
+          setIsAdminLoginModalOpen(false);
+          setIsAdminView(true);
+        }}
       />
     </div>
   );

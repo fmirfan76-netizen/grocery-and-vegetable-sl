@@ -2,6 +2,7 @@ import React from 'react';
 import { SupplierShoppingItemSummary } from '../../services/supplierService';
 import { Supplier } from '../../types';
 import { formatLKR } from '../../utils/formatters';
+import { logoImage } from '../Logo';
 
 interface PrintShoppingListProps {
   supplier: Supplier;
@@ -57,25 +58,32 @@ export const PrintShoppingList: React.FC<PrintShoppingListProps> = ({
         <div className="p-8 font-sans text-gray-900 print:p-0">
           {/* Header */}
           <div className="border-b-2 border-gray-800 pb-4 mb-5 flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-2xl font-black tracking-tight text-gray-900">
-                  MATALE FRESH
-                </span>
-                <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-800 font-bold uppercase rounded">
-                  Shopping Dispatch Slip
-                </span>
-              </div>
-              <p className="text-xs text-gray-600 mt-0.5">
-                Central Administrator Purchase Order • Matale, Sri Lanka
-              </p>
-              <div className="mt-2 text-xs">
-                <p>
-                  <strong>Partner Supplier:</strong> {supplier.name}
+            <div className="flex items-start gap-3">
+              <img
+                src={logoImage}
+                alt="Matale Fresh Logo"
+                className="w-12 h-12 object-cover rounded-xl border border-gray-200"
+              />
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl font-black tracking-tight text-gray-900">
+                    MATALE FRESH
+                  </span>
+                  <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-800 font-bold uppercase rounded">
+                    Shopping Dispatch Slip
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  Central Administrator Purchase Order • Matale, Sri Lanka
                 </p>
-                <p>
-                  <strong>Collection Point:</strong> {supplier.location} | Phone: {supplier.contactPhone}
-                </p>
+                <div className="mt-2 text-xs">
+                  <p>
+                    <strong>Partner Supplier:</strong> {supplier.name}
+                  </p>
+                  <p>
+                    <strong>Collection Point:</strong> {supplier.location} | Phone: {supplier.contactPhone}
+                  </p>
+                </div>
               </div>
             </div>
 

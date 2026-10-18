@@ -1,6 +1,7 @@
 import React from 'react';
 import { Order } from '../../types';
 import { formatLKR, formatDateLK } from '../../utils/formatters';
+import { logoImage } from '../Logo';
 
 interface PrintCustomerInvoiceProps {
   order: Order;
@@ -36,15 +37,22 @@ export const PrintCustomerInvoice: React.FC<PrintCustomerInvoiceProps> = ({
         {/* Paper Layout */}
         <div className="p-8 font-sans text-gray-900 print:p-0">
           <div className="border-b-2 border-gray-900 pb-4 mb-4 flex justify-between items-start">
-            <div>
-              <h1 className="text-xl font-black tracking-tight text-emerald-950">
-                MATALE FRESH GROCERY
-              </h1>
-              <p className="text-xs text-gray-500">මාතලේ එළවළු & සුපර්මාකට් බෙදාහැරීම</p>
-              <p className="text-[11px] text-gray-600 mt-1">
-                Central Pola & Supermarket Delivery • Matale, Sri Lanka
-              </p>
-              <p className="text-[11px] text-gray-600">Hotline: 066 222 3481 / 077 123 4567</p>
+            <div className="flex items-start gap-3">
+              <img
+                src={logoImage}
+                alt="Matale Fresh Logo"
+                className="w-14 h-14 object-cover rounded-xl border border-gray-200"
+              />
+              <div>
+                <h1 className="text-xl font-black tracking-tight text-emerald-950">
+                  MATALE FRESH GROCERY
+                </h1>
+                <p className="text-xs text-gray-500">මාතලේ එළවළු & සුපර්මාකට් බෙදාහැරීම</p>
+                <p className="text-[11px] text-gray-600 mt-0.5">
+                  Central Pola & Supermarket Delivery • Matale, Sri Lanka
+                </p>
+                <p className="text-[11px] text-gray-600">Hotline: 066 222 3481 / 077 123 4567</p>
+              </div>
             </div>
             <div className="text-right">
               <span className={`inline-block px-2 py-0.5 text-xs font-extrabold rounded ${
