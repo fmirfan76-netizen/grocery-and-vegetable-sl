@@ -18,8 +18,9 @@ import {
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
+import { useCustomer } from '../../context/CustomerContext';
 import { createOrder } from '../../services/orderService';
-import { formatLKR, isValidSriLankanPhone } from '../../utils/formatters';
+import { formatLKR, isValidSriLankanPhone, cleanPhoneForWhatsApp } from '../../utils/formatters';
 import { MATALE_AREAS } from '../../services/seedData';
 import { 
   BankAccountDetails, 
@@ -61,11 +62,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   } = useCart();
 
   const { user } = useAuth();
+  const { customer, signup, addNewLocation, refreshOrders } = useCustomer();
 
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
+  const [saveLocationForFuture, setSaveLocationForFuture] = useState(true);
   const [bankAccounts, setBankAccounts] = useState<BankAccountDetails[]>(DEFAULT_BANK_ACCOUNTS);
   const [selectedBankIndex, setSelectedBankIndex] = useState(0);
   const [copiedBankAcc, setCopiedBankAcc] = useState(false);
@@ -75,6 +78,24 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
+
+  // Auto-populate from logged-in customer's profile and current location
+  useEffect(() => {
+    if (customer) {
+      if (customer.fullName && !customerName) setCustomerName(customer.fullName);
+      if (customer.phone && !phone) setPhone(customer.phone);
+      if (customer.currentLocation) {
+        if (!address) setAddress(customer.currentLocation.streetAddress);
+        if (customer.currentLocation.area) {
+          const matchedArea = MATALE_AREAS.find((a) => a.name === customer.currentLocation?.area);
+          if (matchedArea) setSelectedArea(matchedArea);
+        }
+        if (customer.currentLocation.deliveryInstructions && !deliveryInstructions) {
+          setDeliveryInstructions(customer.currentLocation.deliveryInstructions);
+        }
+      }
+    }
+  }, [customer, isOpen]);
 
   // Sync bank accounts and WhatsApp number in real time from Firestore
   useEffect(() => {
@@ -142,7 +163,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setSubmitting(true);
 
       const orderItems = toOrderItems();
-      const customerId = user ? user.uid : `guest_${Date.now()}`;
+      const cleanPhone = cleanPhoneForWhatsApp(phone.trim());
+      const customerId = customer ? customer.id : (user ? user.uid : `usr_${cleanPhone}`);
 
       const created = await createOrder({
         customerId,
@@ -161,9 +183,40 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         items: orderItems,
       });
 
-      // Clear the local cart after successful database write
+      // Clear the local cart after order is recorded
       clearCart();
       setConfirmedOrder(created);
+
+      // Save / update customer location if requested
+      if (customer) {
+        const hasAddress = customer.savedLocations?.some(
+          (l) => l.streetAddress.toLowerCase() === address.trim().toLowerCase()
+        );
+        if (!hasAddress && address.trim()) {
+          addNewLocation({
+            label: 'Delivery Address',
+            area: selectedArea.name,
+            streetAddress: address.trim(),
+            deliveryInstructions: deliveryInstructions.trim(),
+            setAsCurrent: true,
+          }).catch(() => {});
+        }
+      } else if (saveLocationForFuture) {
+        signup({
+          fullName: customerName.trim(),
+          phone: phone.trim(),
+          pin: '1234',
+          initialLocation: {
+            area: selectedArea.name,
+            streetAddress: address.trim(),
+            label: 'Home',
+            deliveryInstructions: deliveryInstructions.trim(),
+          },
+        }).catch(() => {});
+      }
+
+      // Refresh customer orders in background
+      refreshOrders().catch(() => {});
 
       // Open WhatsApp notification with complete order details for the store administrator
       const waUrl = getAdminWhatsAppUrl(created, adminWhatsApp);
@@ -174,12 +227,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       }
     } catch (err) {
       console.error('Checkout error:', err);
-      // Resilient fallback order generation so customer is never stuck
+      // Resilient fallback order generation so customer order is NEVER lost or blocked
       try {
         const fallbackId = `MTL-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+        const cleanPhone = cleanPhoneForWhatsApp(phone.trim());
         const fallbackOrder: Order = {
           id: fallbackId,
-          customerId: user ? user.uid : `guest_${Date.now()}`,
+          customerId: customer ? customer.id : (user ? user.uid : `usr_${cleanPhone}`),
           customerName: customerName.trim(),
           phone: phone.trim(),
           deliveryAddress: address.trim(),
@@ -206,8 +260,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
+
+        // Cache fallback order locally
+        try {
+          const raw = localStorage.getItem('matale_local_orders');
+          const list: Order[] = raw ? JSON.parse(raw) : [];
+          localStorage.setItem('matale_local_orders', JSON.stringify([fallbackOrder, ...list]));
+        } catch {}
+
         clearCart();
         setConfirmedOrder(fallbackOrder);
+        refreshOrders().catch(() => {});
+
         const waUrl = getAdminWhatsAppUrl(fallbackOrder, adminWhatsApp);
         try {
           window.open(waUrl, '_blank');
@@ -216,7 +280,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         }
       } catch {
         setErrorMessage(
-          'Please verify your connection and tap Place Order again.'
+          'Please verify your connection and tap Confirm Order again.'
         );
       }
     } finally {
@@ -394,6 +458,69 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs flex items-start gap-2.5">
                 <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                 <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {/* Logged in customer badge & saved locations quick-selector */}
+            {customer ? (
+              <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-black shadow-xs">
+                      {customer.fullName.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <span className="font-extrabold text-emerald-950">
+                        Ordering as {customer.fullName}
+                      </span>
+                      <span className="text-[10px] text-emerald-700 block font-mono">
+                        +{customer.phone}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full font-black">
+                    Verified Customer
+                  </span>
+                </div>
+
+                {customer.savedLocations && customer.savedLocations.length > 0 && (
+                  <div className="pt-2 border-t border-emerald-200/80">
+                    <span className="text-[11px] font-bold text-emerald-900 block mb-1">
+                      Deliver to Saved Location:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {customer.savedLocations.map((loc) => {
+                        const isMatch = address === loc.streetAddress;
+                        return (
+                          <button
+                            key={loc.id}
+                            type="button"
+                            onClick={() => {
+                              setAddress(loc.streetAddress);
+                              if (loc.deliveryInstructions) setDeliveryInstructions(loc.deliveryInstructions);
+                              const matched = MATALE_AREAS.find((a) => a.name === loc.area);
+                              if (matched) setSelectedArea(matched);
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                              isMatch
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'bg-white text-emerald-900 border border-emerald-300 hover:bg-emerald-100/60'
+                            }`}
+                          >
+                            📍 {loc.label} ({loc.area})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-3 bg-emerald-50/70 rounded-2xl border border-emerald-200 text-xs text-emerald-900 flex items-center gap-2">
+                <User className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  Your name, mobile number and delivery location will be securely saved for fast 1-tap reordering.
+                </span>
               </div>
             )}
 

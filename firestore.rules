@@ -37,6 +37,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Customer user profiles (name, phone, saved delivery locations)
+    match /users/{userId} {
+      allow read, write: if isValidId(userId);
+    }
+
     // Admin registry
     match /admins/{adminId} {
       allow read, write: if true;

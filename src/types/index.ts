@@ -131,3 +131,26 @@ export interface MataleArea {
   deliveryFee: number;
   estMinutes: string;
 }
+
+export interface SavedLocation {
+  id: string;
+  label: string; // 'Home' | 'Work' | 'Family' | 'Other'
+  area: string; // from Matale areas
+  streetAddress: string;
+  deliveryInstructions?: string;
+  isDefault: boolean;
+  latitude?: number;
+  longitude?: number;
+}
+
+export interface CustomerUser {
+  id: string;
+  fullName: string;
+  phone: string;
+  pin?: string;
+  savedLocations: SavedLocation[];
+  currentLocation?: SavedLocation;
+  createdAt: string;
+  updatedAt: string;
+}
+

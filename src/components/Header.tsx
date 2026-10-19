@@ -1,7 +1,8 @@
 import React from 'react';
-import { ShoppingBag, ShieldCheck, MapPin, Globe, PackageCheck, Lock } from 'lucide-react';
+import { ShoppingBag, ShieldCheck, MapPin, Globe, PackageCheck, Lock, User } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import { useCustomer } from '../context/CustomerContext';
 import { SupportedLanguage, TRANSLATIONS } from '../utils/i18n';
 import { Logo } from './Logo';
 
@@ -10,6 +11,7 @@ interface HeaderProps {
   onLanguageChange: (lang: SupportedLanguage) => void;
   onOpenCart: () => void;
   onOpenTracking: () => void;
+  onOpenCustomerAuth: (tab?: 'login' | 'signup' | 'orders' | 'locations') => void;
   onToggleAdmin: () => void;
   isAdminView: boolean;
   pendingOrdersCount?: number;
@@ -20,12 +22,14 @@ export const Header: React.FC<HeaderProps> = ({
   onLanguageChange,
   onOpenCart,
   onOpenTracking,
+  onOpenCustomerAuth,
   onToggleAdmin,
   isAdminView,
   pendingOrdersCount = 0,
 }) => {
   const { itemCount, selectedArea } = useCart();
   const { isAdmin } = useAuth();
+  const { customer, customerOrders } = useCustomer();
   const t = TRANSLATIONS[currentLang];
 
   return (
@@ -36,7 +40,15 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center gap-1.5 truncate">
             <MapPin className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
             <span className="truncate">
-              Matale Express Service: Serving {selectedArea.name} ({selectedArea.estMinutes})
+              {customer?.currentLocation ? (
+                <>
+                  Deliver to: <strong className="text-white">{customer.currentLocation.label} ({customer.currentLocation.area})</strong> • {selectedArea.estMinutes}
+                </>
+              ) : (
+                <>
+                  Matale Express Service: Serving {selectedArea.name} ({selectedArea.estMinutes})
+                </>
+              )}
             </span>
           </div>
 
@@ -87,6 +99,37 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Action Icons */}
         <div className="flex items-center gap-2">
+          {/* Customer Account & Saved Locations Button */}
+          {customer ? (
+            <button
+              onClick={() => onOpenCustomerAuth('orders')}
+              className="flex items-center gap-1.5 text-xs font-bold text-emerald-950 bg-emerald-50 hover:bg-emerald-100/80 px-2.5 sm:px-3 py-2 rounded-xl transition-all border border-emerald-200 cursor-pointer shadow-xs"
+              title="My Account, Saved Delivery Locations & Orders"
+            >
+              <div className="w-5 h-5 rounded-full bg-emerald-700 text-white flex items-center justify-center text-[10px] font-black shrink-0">
+                {customer.fullName.charAt(0).toUpperCase()}
+              </div>
+              <span className="hidden sm:inline font-extrabold max-w-[90px] truncate">
+                {customer.fullName.split(' ')[0]}
+              </span>
+              {customerOrders.length > 0 && (
+                <span className="px-1.5 py-0.2 bg-emerald-700 text-white text-[10px] font-black rounded-full">
+                  {customerOrders.length}
+                </span>
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={() => onOpenCustomerAuth('login')}
+              className="flex items-center gap-1.5 text-xs font-bold text-gray-700 bg-white hover:bg-emerald-50 hover:text-emerald-800 px-2.5 sm:px-3 py-2 rounded-xl transition-colors border border-gray-200 hover:border-emerald-300 cursor-pointer shadow-xs"
+              title="Log In or Sign Up with mobile number"
+            >
+              <User className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="hidden sm:inline">Login / Sign Up</span>
+              <span className="sm:hidden">Login</span>
+            </button>
+          )}
+
           {/* Order Tracking Button */}
           <button
             onClick={onOpenTracking}
