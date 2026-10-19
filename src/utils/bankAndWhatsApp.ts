@@ -175,10 +175,10 @@ export function subscribeToAdminWhatsApp(callback: (phone: string) => void): () 
  * Builds a formatted WhatsApp notification message for the Administrator
  */
 export function buildAdminOrderWhatsAppMessage(order: Order): string {
-  const isVeg = (s: string) => s === 'vegetable_shop';
-
-  const vegItems = order.items.filter((i) => isVeg(i.supplierId));
-  const smItems = order.items.filter((i) => !isVeg(i.supplierId));
+  const vegItems = order.items.filter((i) => i.supplierId === 'vegetable_shop' || i.productCategory === 'vegetables' || i.productCategory === 'greens');
+  const fruitItems = order.items.filter((i) => i.supplierId === 'fruit_stall' || i.productCategory === 'fruits');
+  const meatItems = order.items.filter((i) => i.supplierId === 'meat_shop' || i.productCategory === 'meat');
+  const grocItems = order.items.filter((i) => !vegItems.includes(i) && !fruitItems.includes(i) && !meatItems.includes(i));
 
   let itemsText = '';
 
@@ -189,9 +189,23 @@ export function buildAdminOrderWhatsAppMessage(order: Order): string {
     });
   }
 
-  if (smItems.length > 0) {
-    itemsText += '\n*🛒 SUPERMARKET ITEMS:*\n';
-    smItems.forEach((i) => {
+  if (fruitItems.length > 0) {
+    itemsText += '\n*🍎 FRESH FRUITS (Central Fruit Market):*\n';
+    fruitItems.forEach((i) => {
+      itemsText += `• ${i.productName} (${i.unit}) × ${i.quantity} = ${formatLKR(i.lineTotal)}\n`;
+    });
+  }
+
+  if (meatItems.length > 0) {
+    itemsText += '\n*🍗 100% HALAL MEAT, EGGS & SEAFOOD:*\n';
+    meatItems.forEach((i) => {
+      itemsText += `• ${i.productName} (${i.unit}) × ${i.quantity} = ${formatLKR(i.lineTotal)}\n`;
+    });
+  }
+
+  if (grocItems.length > 0) {
+    itemsText += '\n*🛒 GROCERY & SUPERMARKET ITEMS:*\n';
+    grocItems.forEach((i) => {
       itemsText += `• ${i.productName} (${i.unit}) × ${i.quantity} = ${formatLKR(i.lineTotal)}\n`;
     });
   }

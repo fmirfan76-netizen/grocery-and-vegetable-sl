@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Minus, AlertCircle, Flame, Tag } from 'lucide-react';
+import { Plus, Minus, AlertCircle, Flame, Tag, ShieldCheck } from 'lucide-react';
 import { Product, getProductDivision } from '../../types';
 import { useCart } from '../../context/CartContext';
 import { formatLKR } from '../../utils/formatters';
@@ -24,7 +24,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, currentLang }
       case 'fruits':
         return { label: '🍎 Fruits', bg: 'bg-amber-600 text-white' };
       case 'meat':
-        return { label: '🍗 Chicken & Fish', bg: 'bg-rose-700 text-white' };
+        return { label: '🍗 100% Halal Meat & Eggs', bg: 'bg-rose-700 text-white' };
       case 'groceries':
       default:
         return { label: '🛒 Groceries', bg: 'bg-blue-700 text-white' };
@@ -68,7 +68,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, currentLang }
           <span className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow-xs ${badgeInfo.bg}`}>
             {badgeInfo.label}
           </span>
-          {product.badge && !hasActiveOffer && (
+          {(division === 'meat' || product.category === 'meat' || product.name.includes('Halal')) && (
+            <span className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-md bg-emerald-900/90 text-emerald-200 border border-emerald-400/50 shadow-xs backdrop-blur-xs">
+              <ShieldCheck className="w-2.5 h-2.5 text-emerald-400" />
+              100% Halal
+            </span>
+          )}
+          {product.badge && !hasActiveOffer && !product.badge.includes('Halal') && (
             <span className="inline-flex items-center text-[9px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-400 text-emerald-950 shadow-xs">
               {product.badge}
             </span>

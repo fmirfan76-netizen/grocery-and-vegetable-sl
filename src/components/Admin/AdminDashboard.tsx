@@ -30,7 +30,13 @@ import {
   CreditCard,
   Flame,
   Tag,
-  Percent
+  Percent,
+  Upload,
+  Image as ImageIcon,
+  Link as LinkIcon,
+  Camera,
+  Layers,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Logo, logoImage } from '../Logo';
@@ -73,6 +79,147 @@ import {
 import { PrintShoppingList } from '../Print/PrintShoppingList';
 import { PrintCustomerInvoice } from '../Print/PrintCustomerInvoice';
 
+// Helper to convert & compress any uploaded image file directly into a lightweight, self-contained base64 data URL
+async function processImageFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_DIM = 600;
+        let w = img.width;
+        let h = img.height;
+        if (w > h) {
+          if (w > MAX_DIM) {
+            h = Math.round((h * MAX_DIM) / w);
+            w = MAX_DIM;
+          }
+        } else {
+          if (h > MAX_DIM) {
+            w = Math.round((w * MAX_DIM) / h);
+            h = MAX_DIM;
+          }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(e.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        // 0.82 JPEG quality keeps string ~25KB - 45KB, super fast in Firestore!
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        resolve(dataUrl);
+      };
+      img.onerror = () => reject(new Error('Image failed to load'));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('File reading failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
+const PRODUCT_IMAGE_PRESETS = [
+  {
+    name: 'Fresh Farm Brown Eggs',
+    dept: 'meat',
+    url: 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=600&q=80',
+    icon: '🥚',
+  },
+  {
+    name: '100% Halal Chicken Curry Cut',
+    dept: 'meat',
+    url: 'https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=600&q=80',
+    icon: '🍗',
+  },
+  {
+    name: 'Halal Chicken Breast Fillet',
+    dept: 'meat',
+    url: 'https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=600&q=80',
+    icon: '🥩',
+  },
+  {
+    name: 'Fresh Thalapath Fish Steak',
+    dept: 'meat',
+    url: 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=600&q=80',
+    icon: '🐟',
+  },
+  {
+    name: 'Fresh Lagoon Prawns',
+    dept: 'meat',
+    url: 'https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?auto=format&fit=crop&w=600&q=80',
+    icon: '🦐',
+  },
+  {
+    name: 'Fresh Carrots',
+    dept: 'vegetables',
+    url: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?auto=format&fit=crop&w=600&q=80',
+    icon: '🥕',
+  },
+  {
+    name: 'Green Chillies (Amu Miris)',
+    dept: 'vegetables',
+    url: 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?auto=format&fit=crop&w=600&q=80',
+    icon: '🌶️',
+  },
+  {
+    name: 'Country Tomatoes (Thakkali)',
+    dept: 'vegetables',
+    url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=600&q=80',
+    icon: '🍅',
+  },
+  {
+    name: 'Gotukola / Leafy Greens',
+    dept: 'vegetables',
+    url: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80',
+    icon: '🌿',
+  },
+  {
+    name: 'Ambul Bananas (Kesel)',
+    dept: 'fruits',
+    url: 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?auto=format&fit=crop&w=600&q=80',
+    icon: '🍌',
+  },
+  {
+    name: 'Sweet Papaya',
+    dept: 'fruits',
+    url: 'https://images.unsplash.com/photo-1517282009859-f000ec3b26fe?auto=format&fit=crop&w=600&q=80',
+    icon: '🍈',
+  },
+  {
+    name: 'Sweet Pineapple (Annasi)',
+    dept: 'fruits',
+    url: 'https://images.unsplash.com/photo-1550258987-190a2d41a8ba?auto=format&fit=crop&w=600&q=80',
+    icon: '🍍',
+  },
+  {
+    name: 'Sweet Mangoes',
+    dept: 'fruits',
+    url: 'https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&w=600&q=80',
+    icon: '🥭',
+  },
+  {
+    name: 'Keeri Samba Rice',
+    dept: 'groceries',
+    url: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80',
+    icon: '🍚',
+  },
+  {
+    name: 'Mysoor Dhal / Lentils',
+    dept: 'groceries',
+    url: 'https://images.unsplash.com/photo-1585994192701-512a849767bb?auto=format&fit=crop&w=600&q=80',
+    icon: '🥣',
+  },
+  {
+    name: 'Full Cream Milk Powder',
+    dept: 'groceries',
+    url: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=600&q=80',
+    icon: '🥛',
+  },
+];
+
 export const AdminDashboard: React.FC = () => {
   const { user, isAdmin, adminEmail, authError, clearAuthError, signInWithGoogle, signInWithPasskey, signOut } = useAuth();
 
@@ -111,6 +258,10 @@ export const AdminDashboard: React.FC = () => {
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [productCategoryFilter, setProductCategoryFilter] = useState<string>('all');
+  const [imageInputMode, setImageInputMode] = useState<'upload' | 'link' | 'preset'>('upload');
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Cancel order modal state
   const [cancelModalOrder, setCancelModalOrder] = useState<Order | null>(null);
@@ -1135,6 +1286,100 @@ export const AdminDashboard: React.FC = () => {
         {/* ======================================================== */}
         {activeTab === 'products' && (
           <div className="space-y-4">
+            {/* Quick Department Filter Pills */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setProductCategoryFilter('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  productCategoryFilter === 'all'
+                    ? 'bg-gray-900 text-white shadow-xs'
+                    : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                }`}
+              >
+                <span>All Departments</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-200 text-gray-800 font-extrabold">
+                  {products.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setProductCategoryFilter('vegetables')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  productCategoryFilter === 'vegetables'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'bg-white text-emerald-900 hover:bg-emerald-50 border border-emerald-200'
+                }`}
+              >
+                <span>🥦 Vegetables</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-extrabold">
+                  {products.filter((p) => getProductDivision(p.category) === 'vegetables').length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setProductCategoryFilter('fruits')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  productCategoryFilter === 'fruits'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-white text-amber-900 hover:bg-amber-50 border border-amber-200'
+                }`}
+              >
+                <span>🍎 Fruits</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 font-extrabold">
+                  {products.filter((p) => getProductDivision(p.category) === 'fruits').length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setProductCategoryFilter('meat')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  productCategoryFilter === 'meat'
+                    ? 'bg-rose-700 text-white shadow-xs'
+                    : 'bg-white text-rose-900 hover:bg-rose-50 border border-rose-200'
+                }`}
+              >
+                <span>🍗 Meat & Seafood (100% Halal)</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-900 font-extrabold">
+                  {products.filter((p) => getProductDivision(p.category) === 'meat').length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setProductCategoryFilter('groceries')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  productCategoryFilter === 'groceries'
+                    ? 'bg-blue-700 text-white shadow-xs'
+                    : 'bg-white text-blue-900 hover:bg-blue-50 border border-blue-200'
+                }`}
+              >
+                <span>🛒 Grocery Items</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-900 font-extrabold">
+                  {products.filter((p) => getProductDivision(p.category) === 'groceries').length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setProductCategoryFilter('offers')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  productCategoryFilter === 'offers'
+                    ? 'bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow-xs'
+                    : 'bg-white text-rose-900 hover:bg-rose-50 border border-rose-200'
+                }`}
+              >
+                <Flame className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
+                <span>Weekly Offers</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-900 font-extrabold">
+                  {products.filter((p) => p.isOffer && p.offerPrice && p.offerPrice < p.price).length}
+                </span>
+              </button>
+            </div>
+
             <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
@@ -1159,7 +1404,7 @@ export const AdminDashboard: React.FC = () => {
                 </option>
                 <option value="vegetables">🥦 Vegetables ({products.filter((p) => getProductDivision(p.category) === 'vegetables').length})</option>
                 <option value="fruits">🍎 Fruits ({products.filter((p) => getProductDivision(p.category) === 'fruits').length})</option>
-                <option value="meat">🍗 Chicken & Fish ({products.filter((p) => getProductDivision(p.category) === 'meat').length})</option>
+                <option value="meat">🍗 Meat & Seafood - 100% Halal ({products.filter((p) => getProductDivision(p.category) === 'meat').length})</option>
                 <option value="groceries">🛒 Groceries ({products.filter((p) => getProductDivision(p.category) === 'groceries').length})</option>
               </select>
 
@@ -1180,21 +1425,32 @@ export const AdminDashboard: React.FC = () => {
                 </button>
                 <button
                   onClick={() => {
+                    const currentDept = productCategoryFilter === 'fruits' ? 'fruits' : productCategoryFilter === 'meat' ? 'meat' : productCategoryFilter === 'groceries' ? 'groceries' : 'vegetables';
+                    const defaultCategory = currentDept === 'fruits' ? 'fruits' : currentDept === 'meat' ? 'meat' : currentDept === 'groceries' ? 'supermarket_staples' : 'vegetables';
+                    const defaultSupplier = currentDept === 'fruits' ? 'fruit_stall' : currentDept === 'meat' ? 'meat_shop' : currentDept === 'groceries' ? 'supermarket' : 'vegetable_shop';
+                    const defaultBadge = currentDept === 'meat' ? '100% Halal Certified' : 'Weekly Offer';
+
                     setEditingProduct({
                       id: `prod-${Date.now()}`,
                       name: '',
                       nameSi: '',
                       nameTa: '',
-                      category: 'vegetables',
-                      supplierId: 'vegetable_shop',
+                      category: defaultCategory,
+                      supplierId: defaultSupplier,
                       price: 200,
                       costPrice: 150,
                       unit: '500g',
                       minQuantity: 1,
                       step: 1,
                       inStock: true,
-                      imageUrl: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80',
-                      badge: 'Weekly Offer',
+                      imageUrl: currentDept === 'meat' 
+                        ? 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=600&q=80'
+                        : currentDept === 'fruits'
+                        ? 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?auto=format&fit=crop&w=600&q=80'
+                        : currentDept === 'groceries'
+                        ? 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80'
+                        : 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80',
+                      badge: defaultBadge,
                       isOffer: false,
                       offerPrice: 0,
                       offerLabel: 'Weekly Offer',
@@ -2050,9 +2306,121 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
+              {/* 1. Department Selector (Vegetables, Fruits, Meat & Seafood, Groceries) */}
+              <div className="space-y-1.5 p-3 bg-gray-50 rounded-2xl border border-gray-200">
+                <div className="flex items-center justify-between">
+                  <label className="font-extrabold text-gray-800 text-xs flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-emerald-600" />
+                    <span>Select Department / Division:</span>
+                  </label>
+                  <span className="text-[10px] text-gray-500 font-black uppercase tracking-wider">
+                    {getProductDivision(editingProduct.category)}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                  {/* Vegetable */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingProduct({
+                        ...editingProduct,
+                        category: 'vegetables',
+                        supplierId: 'vegetable_shop',
+                      });
+                    }}
+                    className={`p-2 rounded-xl text-xs font-bold border transition-all flex flex-col items-center gap-1 ${
+                      getProductDivision(editingProduct.category) === 'vegetables'
+                        ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs ring-2 ring-emerald-500'
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-emerald-50 hover:border-emerald-300'
+                    }`}
+                  >
+                    <span className="text-xl">🥦</span>
+                    <span>Vegetables</span>
+                  </button>
+
+                  {/* Fruits */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingProduct({
+                        ...editingProduct,
+                        category: 'fruits',
+                        supplierId: 'fruit_stall',
+                      });
+                    }}
+                    className={`p-2 rounded-xl text-xs font-bold border transition-all flex flex-col items-center gap-1 ${
+                      getProductDivision(editingProduct.category) === 'fruits'
+                        ? 'bg-amber-600 text-white border-amber-700 shadow-xs ring-2 ring-amber-500'
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-amber-50 hover:border-amber-300'
+                    }`}
+                  >
+                    <span className="text-xl">🍎</span>
+                    <span>Fruits</span>
+                  </button>
+
+                  {/* Meat & Seafood (100% Halal) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingProduct({
+                        ...editingProduct,
+                        category: 'meat',
+                        supplierId: 'meat_shop',
+                        badge: editingProduct.badge || '100% Halal Certified',
+                      });
+                    }}
+                    className={`p-2 rounded-xl text-xs font-bold border transition-all flex flex-col items-center gap-1 ${
+                      getProductDivision(editingProduct.category) === 'meat'
+                        ? 'bg-rose-700 text-white border-rose-800 shadow-xs ring-2 ring-rose-500'
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-rose-50 hover:border-rose-300'
+                    }`}
+                  >
+                    <span className="text-xl">🍗</span>
+                    <span>Meat & Halal</span>
+                  </button>
+
+                  {/* Groceries */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingProduct({
+                        ...editingProduct,
+                        category: 'supermarket_staples',
+                        supplierId: 'supermarket',
+                      });
+                    }}
+                    className={`p-2 rounded-xl text-xs font-bold border transition-all flex flex-col items-center gap-1 ${
+                      getProductDivision(editingProduct.category) === 'groceries'
+                        ? 'bg-blue-700 text-white border-blue-800 shadow-xs ring-2 ring-blue-500'
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-blue-50 hover:border-blue-300'
+                    }`}
+                  >
+                    <span className="text-xl">🛒</span>
+                    <span>Groceries</span>
+                  </button>
+                </div>
+
+                {/* 100% Halal Notice & Guarantee when Meat is active */}
+                {getProductDivision(editingProduct.category) === 'meat' && (
+                  <div className="mt-2 p-2.5 bg-emerald-50 rounded-xl border border-emerald-300 text-emerald-950 text-[11px] flex items-start gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-extrabold text-emerald-900">
+                        100% Halal Certified Poultry, Farm Eggs & Seafood Guarantee
+                      </p>
+                      <p className="text-emerald-800 text-[10px]">
+                        Strictly Halal chicken, fresh farm brown eggs, and ocean fish only. Pork or pig items are strictly prohibited in Matale Fresh.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Subcategory & Supplier Assignment */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="font-bold text-gray-700 block mb-1">Department / Category</label>
+                  <label className="font-bold text-gray-700 block mb-1">Subcategory</label>
                   <select
                     value={editingProduct.category}
                     onChange={(e) => {
@@ -2070,15 +2438,27 @@ export const AdminDashboard: React.FC = () => {
                     }}
                     className="w-full p-2 border border-gray-200 rounded-xl font-bold bg-white"
                   >
-                    <option value="vegetables">🥦 Vegetables (Pola Harvest)</option>
-                    <option value="fruits">🍎 Fruits (Tropical & Highland)</option>
-                    <option value="meat">🍗 Chicken, Fish & Eggs (Halal)</option>
-                    <option value="supermarket_staples">🛒 Groceries (Rice, Dhal, Staples)</option>
-                    <option value="dairy_beverages">🥛 Dairy & Beverages (Milk, Tea)</option>
-                    <option value="spices_condiments">🌶️ Spices (Curry & Chili Powder)</option>
-                    <option value="greens">🌿 Leafy Greens & Herbs</option>
-                    <option value="snacks_bakery">🍪 Biscuits & Instant Noodles</option>
-                    <option value="household">🧼 Household Essentials</option>
+                    {getProductDivision(editingProduct.category) === 'vegetables' && (
+                      <>
+                        <option value="vegetables">🥦 Vegetables (Pola Produce)</option>
+                        <option value="greens">🌿 Leafy Greens & Herbs</option>
+                      </>
+                    )}
+                    {getProductDivision(editingProduct.category) === 'fruits' && (
+                      <option value="fruits">🍎 Fruits (Tropical & Highland)</option>
+                    )}
+                    {getProductDivision(editingProduct.category) === 'meat' && (
+                      <option value="meat">🍗 100% Halal Poultry, Farm Eggs & Fish</option>
+                    )}
+                    {getProductDivision(editingProduct.category) === 'groceries' && (
+                      <>
+                        <option value="supermarket_staples">🛒 Groceries (Rice, Dhal, Staples)</option>
+                        <option value="dairy_beverages">🥛 Dairy & Beverages (Milk, Tea)</option>
+                        <option value="spices_condiments">🌶️ Spices (Curry & Chilli Powders)</option>
+                        <option value="snacks_bakery">🍪 Biscuits & Instant Noodles</option>
+                        <option value="household">🧼 Household Essentials</option>
+                      </>
+                    )}
                   </select>
                 </div>
                 <div>
@@ -2245,16 +2625,227 @@ export const AdminDashboard: React.FC = () => {
                 )}
               </div>
 
-              <div>
-                <label className="font-bold text-gray-700 block mb-1">Image URL</label>
-                <input
-                  type="text"
-                  value={editingProduct.imageUrl}
-                  onChange={(e) =>
-                    setEditingProduct({ ...editingProduct, imageUrl: e.target.value })
-                  }
-                  className="w-full p-2 border border-gray-200 rounded-xl font-mono text-[11px]"
-                />
+              {/* Product Image Section: Upload from Device or Paste Link or Choose Preset */}
+              <div className="space-y-2.5 p-3 bg-gray-50 rounded-2xl border border-gray-200">
+                <div className="flex items-center justify-between">
+                  <label className="font-extrabold text-gray-800 text-xs flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4 text-emerald-600" />
+                    <span>Product Image (Uploadable or Link)</span>
+                  </label>
+                  <div className="flex items-center gap-1 bg-gray-200/80 p-0.5 rounded-lg text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setImageInputMode('upload')}
+                      className={`px-2.5 py-1 rounded-md font-extrabold transition-all ${
+                        imageInputMode === 'upload'
+                          ? 'bg-white text-emerald-800 shadow-xs'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      📁 Upload File
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImageInputMode('link')}
+                      className={`px-2.5 py-1 rounded-md font-extrabold transition-all ${
+                        imageInputMode === 'link'
+                          ? 'bg-white text-emerald-800 shadow-xs'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      🔗 Web Link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImageInputMode('preset')}
+                      className={`px-2.5 py-1 rounded-md font-extrabold transition-all ${
+                        imageInputMode === 'preset'
+                          ? 'bg-white text-emerald-800 shadow-xs'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      ✨ Presets
+                    </button>
+                  </div>
+                </div>
+
+                {/* Current Image Preview & Live Status */}
+                <div className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-gray-200">
+                  <div className="w-16 h-16 rounded-xl bg-gray-100 overflow-hidden relative shrink-0 border border-gray-200 shadow-2xs">
+                    {editingProduct.imageUrl ? (
+                      <img
+                        src={editingProduct.imageUrl}
+                        alt={editingProduct.name || 'Product preview'}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src =
+                            'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                        <ImageIcon className="w-6 h-6" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-gray-800 truncate">
+                        {editingProduct.imageUrl?.startsWith('data:')
+                          ? '📷 Uploaded from Device (Optimized)'
+                          : editingProduct.imageUrl
+                          ? '🔗 Web Link Connected'
+                          : 'No image chosen yet'}
+                      </span>
+                      {editingProduct.imageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingProduct({ ...editingProduct, imageUrl: '' })}
+                          className="text-[10px] text-rose-600 hover:underline font-bold"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-gray-400 truncate font-mono">
+                      {editingProduct.imageUrl
+                        ? editingProduct.imageUrl.startsWith('data:')
+                          ? 'Stored securely as embedded image data'
+                          : editingProduct.imageUrl
+                        : 'Upload photo from phone / PC, paste a URL, or pick from presets.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Mode 1: Upload from Device */}
+                {imageInputMode === 'upload' && (
+                  <div className="space-y-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          setIsProcessingImage(true);
+                          setImageUploadError(null);
+                          const dataUrl = await processImageFile(file);
+                          setEditingProduct({
+                            ...editingProduct,
+                            imageUrl: dataUrl,
+                          });
+                          showNotification('Image uploaded from device and optimized.');
+                        } catch (err) {
+                          console.error('Image processing error:', err);
+                          setImageUploadError('Could not process this image. Please choose another.');
+                        } finally {
+                          setIsProcessingImage(false);
+                        }
+                      }}
+                    />
+
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={async (e) => {
+                        e.preventDefault();
+                        const file = e.dataTransfer.files?.[0];
+                        if (!file) return;
+                        try {
+                          setIsProcessingImage(true);
+                          setImageUploadError(null);
+                          const dataUrl = await processImageFile(file);
+                          setEditingProduct({
+                            ...editingProduct,
+                            imageUrl: dataUrl,
+                          });
+                          showNotification('Image dropped and uploaded.');
+                        } catch (err) {
+                          console.error('Image drop error:', err);
+                          setImageUploadError('Failed to process dropped image.');
+                        } finally {
+                          setIsProcessingImage(false);
+                        }
+                      }}
+                      className="border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-white hover:bg-emerald-50/50 p-4 rounded-xl cursor-pointer text-center transition-all group"
+                    >
+                      {isProcessingImage ? (
+                        <div className="flex items-center justify-center gap-2 py-2 text-emerald-700">
+                          <RefreshCw className="w-5 h-5 animate-spin" />
+                          <span className="font-bold text-xs">Optimizing image from your device...</span>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
+                            <Upload className="w-5 h-5" />
+                          </div>
+                          <p className="font-black text-xs text-emerald-950">
+                            Click to upload image from device or drag & drop here
+                          </p>
+                          <p className="text-[10px] text-gray-500">
+                            Supports Mobile Camera, Photo Gallery, JPG, PNG, WEBP (auto-compressed for instant loading)
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {imageUploadError && (
+                      <p className="text-[11px] text-rose-600 font-bold">{imageUploadError}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Mode 2: URL Link */}
+                {imageInputMode === 'link' && (
+                  <div className="space-y-1.5">
+                    <div className="relative">
+                      <LinkIcon className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        value={editingProduct.imageUrl}
+                        onChange={(e) =>
+                          setEditingProduct({ ...editingProduct, imageUrl: e.target.value })
+                        }
+                        placeholder="https://images.unsplash.com/... or web image link"
+                        className="w-full text-xs pl-8 pr-3 py-2 border border-gray-200 rounded-xl bg-white font-mono"
+                      />
+                    </div>
+                    <p className="text-[10px] text-gray-500">
+                      Paste any public image link to use directly.
+                    </p>
+                  </div>
+                )}
+
+                {/* Mode 3: Presets */}
+                {imageInputMode === 'preset' && (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] text-gray-500">
+                      Click any photo preset for instant Matale Fresh catalogue setup:
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-40 overflow-y-auto p-1 bg-white rounded-xl border border-gray-200">
+                      {PRODUCT_IMAGE_PRESETS.map((preset) => (
+                        <button
+                          key={preset.name}
+                          type="button"
+                          onClick={() => {
+                            setEditingProduct({
+                              ...editingProduct,
+                              imageUrl: preset.url,
+                            });
+                            showNotification(`Applied photo for ${preset.name}`);
+                          }}
+                          className="flex items-center gap-1.5 p-1.5 hover:bg-emerald-50 rounded-lg text-left border border-gray-100 hover:border-emerald-300 text-[11px] transition-all"
+                        >
+                          <span className="text-base">{preset.icon}</span>
+                          <span className="font-bold text-gray-800 truncate">{preset.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2 pt-2">

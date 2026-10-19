@@ -1,12 +1,23 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, doc, getDocFromServer, Firestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
-// Export Firestore with specific database ID from config
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Export Firestore with specific database ID and ignore undefined properties
+let firestoreDb: Firestore;
+try {
+  firestoreDb = initializeFirestore(
+    app,
+    { ignoreUndefinedProperties: true },
+    firebaseConfig.firestoreDatabaseId
+  );
+} catch {
+  firestoreDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+}
+
+export const db = firestoreDb;
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 

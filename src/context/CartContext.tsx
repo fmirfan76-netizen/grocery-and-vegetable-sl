@@ -128,15 +128,17 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return items.map((i) => {
       const price = i.product.isOffer && i.product.offerPrice ? i.product.offerPrice : i.product.price;
       return {
-        productId: i.product.id,
-        productName: i.product.name,
-        productNameSi: i.product.nameSi,
-        unit: i.product.unit,
-        quantity: i.quantity,
+        productId: i.product.id || '',
+        productName: i.product.name || 'Produce Item',
+        productNameSi: i.product.nameSi || '',
+        productNameTa: i.product.nameTa || '',
+        productCategory: i.product.category || 'vegetables',
+        unit: i.product.unit || '1',
+        quantity: i.quantity || 1,
         customerPrice: price,
-        lineTotal: price * i.quantity,
-        supplierId: i.product.supplierId,
-        actualPurchaseCost: i.product.costPrice,
+        lineTotal: price * (i.quantity || 1),
+        supplierId: i.product.supplierId || 'vegetable_shop',
+        actualPurchaseCost: i.product.costPrice || (price * 0.8),
         status: 'available',
       };
     });

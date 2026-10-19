@@ -15,12 +15,17 @@ import { handleFirestoreError, OperationType } from '../firebase/errorHandler';
 import { Order, OrderStatus } from '../types';
 
 const ORDERS_COLLECTION = 'orders';
+const LOCAL_ORDERS_KEY = 'matale_local_orders';
+const PENDING_SYNC_KEY = 'matale_pending_sync_orders';
 
 export function generateOrderId(): string {
   const randomPart = Math.floor(1000 + Math.random() * 9000);
   return `MTL-2026-${randomPart}`;
 }
 
+/**
+ * Creates and records a customer order with instant local persistence and Firestore sync
+ */
 export async function createOrder(
   orderData: Omit<Order, 'id' | 'createdAt' | 'status'>
 ): Promise<Order> {
@@ -28,22 +33,48 @@ export async function createOrder(
   const now = new Date().toISOString();
 
   // Validate server-authoritative calculations
-  const calculatedSubtotal = orderData.items.reduce(
-    (sum, item) => sum + item.customerPrice * item.quantity, 
+  const calculatedSubtotal = (orderData.items || []).reduce(
+    (sum, item) => sum + (Number(item.customerPrice) || 0) * (Number(item.quantity) || 1), 
     0
   );
   const deliveryFee = Number(orderData.deliveryFee) || 200;
   const totalAmount = calculatedSubtotal + deliveryFee;
 
+  // Clean items array to ensure no undefined values are sent to Firestore
+  const sanitizedItems = (orderData.items || []).map((item) => ({
+    productId: String(item.productId || ''),
+    productName: String(item.productName || 'Fresh Item'),
+    productNameSi: String(item.productNameSi || ''),
+    productNameTa: String(item.productNameTa || ''),
+    productCategory: String(item.productCategory || 'vegetables'),
+    unit: String(item.unit || '1'),
+    quantity: Number(item.quantity) || 1,
+    customerPrice: Number(item.customerPrice) || 0,
+    lineTotal: (Number(item.customerPrice) || 0) * (Number(item.quantity) || 1),
+    supplierId: String(item.supplierId || 'vegetable_shop'),
+    actualPurchaseCost: Number(item.actualPurchaseCost) || ((Number(item.customerPrice) || 0) * 0.8),
+    status: item.status || 'available',
+  }));
+
   const newOrder: Order = {
-    ...orderData,
     id: orderId,
-    status: 'Pending',
+    customerId: String(orderData.customerId || `guest_${Date.now()}`),
+    customerName: String(orderData.customerName || 'Customer'),
+    phone: String(orderData.phone || ''),
+    deliveryAddress: String(orderData.deliveryAddress || ''),
+    area: String(orderData.area || 'Matale'),
+    deliveryInstructions: orderData.deliveryInstructions ? String(orderData.deliveryInstructions) : '',
+    orderNotes: orderData.orderNotes ? String(orderData.orderNotes) : '',
+    substitutionPreference: orderData.substitutionPreference || 'call_first',
+    paymentMethod: orderData.paymentMethod || 'cash_on_delivery',
+    itemCount: Number(orderData.itemCount) || sanitizedItems.reduce((s, i) => s + i.quantity, 0),
     subtotal: calculatedSubtotal,
     deliveryFee,
     totalAmount,
     actualSubtotal: calculatedSubtotal,
     actualTotalAmount: totalAmount,
+    items: sanitizedItems,
+    status: 'Pending',
     statusHistory: [
       {
         status: 'Pending',
@@ -55,26 +86,105 @@ export async function createOrder(
     updatedAt: now,
   };
 
+  // Convert to clean JSON object free of any undefined or prototype properties
+  const cleanOrder = JSON.parse(JSON.stringify(newOrder)) as Order;
+
+  // 1. Immediately cache locally so order is never lost under any network circumstance
+  try {
+    const existingRaw = localStorage.getItem(LOCAL_ORDERS_KEY);
+    const existingList: Order[] = existingRaw ? JSON.parse(existingRaw) : [];
+    const updatedList = [cleanOrder, ...existingList.filter((o) => o.id !== cleanOrder.id)];
+    localStorage.setItem(LOCAL_ORDERS_KEY, JSON.stringify(updatedList.slice(0, 50)));
+    localStorage.setItem('matale_last_order', JSON.stringify(cleanOrder));
+  } catch (storageErr) {
+    console.warn('Local storage order caching note:', storageErr);
+  }
+
+  // 2. Persist to Firestore with automatic fallback for network latency/drop
   try {
     const orderRef = doc(db, ORDERS_COLLECTION, orderId);
-    await setDoc(orderRef, newOrder);
-    return newOrder;
+    await setDoc(orderRef, cleanOrder);
+    return cleanOrder;
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, `${ORDERS_COLLECTION}/${orderId}`);
+    console.warn('Firestore direct write notice, queued for background sync:', error);
+    try {
+      const pendingRaw = localStorage.getItem(PENDING_SYNC_KEY);
+      const pending: Order[] = pendingRaw ? JSON.parse(pendingRaw) : [];
+      pending.push(cleanOrder);
+      localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(pending));
+    } catch {
+      // ignore
+    }
+    // Return cleanOrder so customer proceeds to success & WhatsApp without error
+    return cleanOrder;
   }
 }
 
-export async function getOrderById(orderId: string): Promise<Order | null> {
+/**
+ * Synchronizes any pending offline orders to Firestore
+ */
+export async function syncPendingOrders(): Promise<void> {
   try {
-    const orderRef = doc(db, ORDERS_COLLECTION, orderId.trim());
-    const snap = await getDoc(orderRef);
-    if (!snap.exists()) {
-      return null;
+    const pendingRaw = localStorage.getItem(PENDING_SYNC_KEY);
+    if (!pendingRaw) return;
+    const pending: Order[] = JSON.parse(pendingRaw);
+    if (!pending || pending.length === 0) return;
+
+    const remaining: Order[] = [];
+    for (const ord of pending) {
+      try {
+        const orderRef = doc(db, ORDERS_COLLECTION, ord.id);
+        await setDoc(orderRef, ord, { merge: true });
+      } catch {
+        remaining.push(ord);
+      }
     }
-    return snap.data() as Order;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, `${ORDERS_COLLECTION}/${orderId}`);
+
+    if (remaining.length > 0) {
+      localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(remaining));
+    } else {
+      localStorage.removeItem(PENDING_SYNC_KEY);
+    }
+  } catch (e) {
+    console.warn('Background order sync note:', e);
   }
+}
+
+// Auto-trigger sync on network online event
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    syncPendingOrders();
+  });
+  setTimeout(() => {
+    syncPendingOrders();
+  }, 3000);
+}
+
+export async function getOrderById(orderId: string): Promise<Order | null> {
+  const cleanId = orderId.trim();
+  try {
+    const orderRef = doc(db, ORDERS_COLLECTION, cleanId);
+    const snap = await getDoc(orderRef);
+    if (snap.exists()) {
+      return snap.data() as Order;
+    }
+  } catch (error) {
+    console.warn('Firestore getOrder error, checking local store:', error);
+  }
+
+  // Fallback to local storage cache if Firestore is offline
+  try {
+    const localRaw = localStorage.getItem(LOCAL_ORDERS_KEY);
+    if (localRaw) {
+      const list: Order[] = JSON.parse(localRaw);
+      const match = list.find((o) => o.id === cleanId);
+      if (match) return match;
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
 }
 
 export function subscribeToOrders(
@@ -91,10 +201,35 @@ export function subscribeToOrders(
         snapshot.forEach((docSnap) => {
           orders.push(docSnap.data() as Order);
         });
+        // Merge with local orders if any exist
+        try {
+          const localRaw = localStorage.getItem(LOCAL_ORDERS_KEY);
+          if (localRaw) {
+            const localList: Order[] = JSON.parse(localRaw);
+            const serverIds = new Set(orders.map((o) => o.id));
+            for (const loc of localList) {
+              if (!serverIds.has(loc.id)) {
+                orders.push(loc);
+              }
+            }
+            orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          }
+        } catch {
+          // ignore
+        }
         onOrdersChange(orders);
       },
       (error) => {
         console.warn('Orders real-time feed notice:', error.message);
+        // Fallback to local cached orders
+        try {
+          const localRaw = localStorage.getItem(LOCAL_ORDERS_KEY);
+          if (localRaw) {
+            onOrdersChange(JSON.parse(localRaw));
+          }
+        } catch {
+          // ignore
+        }
         if (onError) onError(error as Error);
       }
     );
@@ -114,6 +249,14 @@ export async function fetchAllOrders(): Promise<Order[]> {
     });
     return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } catch (error) {
+    try {
+      const localRaw = localStorage.getItem(LOCAL_ORDERS_KEY);
+      if (localRaw) {
+        return JSON.parse(localRaw);
+      }
+    } catch {
+      // ignore
+    }
     handleFirestoreError(error, OperationType.LIST, path);
   }
 }
@@ -139,20 +282,20 @@ export async function updateOrderStatus(
     history.push({
       status: newStatus,
       timestamp,
-      note: note || `Status updated to ${newStatus}`,
+      note: note || `Order marked as ${newStatus}`,
     });
 
-    const updates: Record<string, unknown> = {
+    const updatePayload: Record<string, any> = {
       status: newStatus,
       statusHistory: history,
       updatedAt: timestamp,
     };
 
-    if (newStatus === 'Cancelled' && cancellationReason) {
-      updates.cancellationReason = cancellationReason;
+    if (cancellationReason) {
+      updatePayload.cancellationReason = cancellationReason;
     }
 
-    await updateDoc(orderRef, updates);
+    await updateDoc(orderRef, updatePayload);
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
@@ -160,13 +303,21 @@ export async function updateOrderStatus(
 
 export async function updateOrderAdminAdjustments(
   orderId: string,
-  updates: Partial<Order>
+  adjustments: {
+    actualSubtotal?: number;
+    actualTotalAmount?: number;
+    deliveryFee?: number;
+    deliveryExpense?: number;
+    totalPurchaseCost?: number;
+    items?: Order['items'];
+    notes?: string;
+  }
 ): Promise<void> {
   const path = `${ORDERS_COLLECTION}/${orderId}`;
   try {
     const orderRef = doc(db, ORDERS_COLLECTION, orderId);
     await updateDoc(orderRef, {
-      ...updates,
+      ...adjustments,
       updatedAt: new Date().toISOString(),
     });
   } catch (error) {
