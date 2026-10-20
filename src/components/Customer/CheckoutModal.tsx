@@ -12,10 +12,10 @@ import {
   MessageSquare, 
   CreditCard, 
   Building2, 
-  Copy, 
   Check, 
   ExternalLink,
-  Map 
+  Map,
+  Lock 
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
@@ -64,7 +64,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   } = useCart();
 
   const { user } = useAuth();
-  const { customer, signup, addNewLocation, refreshOrders } = useCustomer();
+  const { customer, signup, addNewLocation, refreshOrders, openAuthModal } = useCustomer();
 
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
@@ -149,6 +149,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setErrorMessage(null);
 
     // Form validations
+    if (!customer) {
+      setErrorMessage('You must be logged in with your mobile number to complete checkout.');
+      return;
+    }
+
     if (!customerName.trim()) {
       setErrorMessage('Please enter your full name.');
       return;

@@ -76,12 +76,14 @@ interface CustomerAuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onTrackOrder?: (orderId: string) => void;
+  isCheckoutPending?: boolean;
 }
 
 export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   isOpen,
   onClose,
   onTrackOrder,
+  isCheckoutPending = false,
 }) => {
   const {
     customer,
@@ -444,6 +446,21 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
             </>
           )}
         </div>
+
+        {/* Checkout Pending Notice if redirected from Cart */}
+        {isCheckoutPending && !customer && (
+          <div className="mx-6 mt-3 p-3 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 rounded-2xl text-xs text-amber-950 flex items-center gap-2.5 shadow-xs">
+            <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
+              🛒
+            </div>
+            <div className="flex-1">
+              <p className="font-extrabold text-amber-950 text-xs">Login Required to Complete Checkout</p>
+              <p className="text-[11px] text-amber-800">
+                Please log in or sign up with your mobile number. You'll be immediately taken to complete your delivery order!
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Feedback Alerts */}
         <div className="px-6 pt-3">

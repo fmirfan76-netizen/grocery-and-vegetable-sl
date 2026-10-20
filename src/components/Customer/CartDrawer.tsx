@@ -1,6 +1,7 @@
 import React from 'react';
-import { X, Trash2, Plus, Minus, AlertCircle, ShoppingBag, Truck, Info, ArrowRight, ShieldCheck } from 'lucide-react';
+import { X, Trash2, Plus, Minus, AlertCircle, ShoppingBag, Truck, Info, ArrowRight, ShieldCheck, Lock } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
+import { useCustomer } from '../../context/CustomerContext';
 import { formatLKR } from '../../utils/formatters';
 import { MATALE_AREAS } from '../../services/seedData';
 import { SupportedLanguage, TRANSLATIONS } from '../../utils/i18n';
@@ -36,6 +37,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     substitutionPreference,
     setSubstitutionPreference,
   } = useCart();
+  const { customer } = useCustomer();
 
   const t = TRANSLATIONS[currentLang];
 
@@ -306,14 +308,30 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
             <button
               onClick={onProceedToCheckout}
-              className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
+              className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all active:scale-[0.99] cursor-pointer"
             >
-              <span>Proceed to Checkout</span>
-              <ArrowRight className="w-4 h-4" />
+              {!customer ? (
+                <>
+                  <Lock className="w-4 h-4 text-amber-300" />
+                  <span>Log In to Proceed to Checkout</span>
+                </>
+              ) : (
+                <>
+                  <span>Proceed to Checkout</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
-            <p className="text-center text-[10px] text-gray-500">
-              💵 Cash on Delivery & 🏦 Bank Transfer Accepted in Matale
-            </p>
+            {!customer ? (
+              <p className="text-center text-[10px] text-amber-900 font-bold bg-amber-50 py-1.5 px-2 rounded-lg border border-amber-200 flex items-center justify-center gap-1.5">
+                <Lock className="w-3 h-3 text-amber-600" />
+                <span>You must log in with your mobile number to checkout</span>
+              </p>
+            ) : (
+              <p className="text-center text-[10px] text-gray-500">
+                💵 Cash on Delivery & 🏦 Bank Transfer Accepted in Matale
+              </p>
+            )}
           </div>
         )}
       </div>

@@ -35,7 +35,17 @@ function AppContent() {
   const [adminPhone, setAdminPhone] = useState<string>(getAdminWhatsAppNumber());
 
   const { isAdmin } = useAuth();
-  const { isAuthModalOpen, closeAuthModal, openAuthModal } = useCustomer();
+  const { isAuthModalOpen, closeAuthModal, openAuthModal, customer } = useCustomer();
+  const [pendingCheckout, setPendingCheckout] = useState<boolean>(false);
+
+  // When customer logs in or signs up while checking out, automatically transition to checkout
+  useEffect(() => {
+    if (customer && pendingCheckout) {
+      setPendingCheckout(false);
+      closeAuthModal();
+      setIsCheckoutOpen(true);
+    }
+  }, [customer, pendingCheckout, closeAuthModal]);
 
   // Initialize and verify connection on mount
   useEffect(() => {
@@ -291,7 +301,12 @@ function AppContent() {
         onClose={() => setIsCartOpen(false)}
         onProceedToCheckout={() => {
           setIsCartOpen(false);
-          setIsCheckoutOpen(true);
+          if (!customer) {
+            setPendingCheckout(true);
+            openAuthModal('login');
+          } else {
+            setIsCheckoutOpen(true);
+          }
         }}
         currentLang={currentLang}
       />
@@ -311,11 +326,15 @@ function AppContent() {
       {/* Customer Account & Order Status Modal */}
       <CustomerAuthModal
         isOpen={isAuthModalOpen}
-        onClose={closeAuthModal}
+        onClose={() => {
+          setPendingCheckout(false);
+          closeAuthModal();
+        }}
         onTrackOrder={(orderId) => {
           setTrackingOrderId(orderId);
           setIsTrackingOpen(true);
         }}
+        isCheckoutPending={pendingCheckout}
       />
 
       {/* Discrete Administrator Login Modal (Never linked visibly to customers) */}
