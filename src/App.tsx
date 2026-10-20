@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
+import { CustomerProvider, useCustomer } from './context/CustomerContext';
 import { Header } from './components/Header';
 import { CustomerHome } from './components/Customer/CustomerHome';
 import { CartDrawer } from './components/Customer/CartDrawer';
 import { CheckoutModal } from './components/Customer/CheckoutModal';
 import { OrderTrackingModal } from './components/Customer/OrderTrackingModal';
+import { CustomerAuthModal } from './components/Customer/CustomerAuthModal';
 import { AdminDashboard } from './components/Admin/AdminDashboard';
 import { testConnection } from './firebase/config';
 import { fetchProducts } from './services/productService';
@@ -33,6 +35,7 @@ function AppContent() {
   const [adminPhone, setAdminPhone] = useState<string>(getAdminWhatsAppNumber());
 
   const { isAdmin } = useAuth();
+  const { isAuthModalOpen, closeAuthModal, openAuthModal } = useCustomer();
 
   // Initialize and verify connection on mount
   useEffect(() => {
@@ -131,6 +134,7 @@ function AppContent() {
           setTrackingOrderId(newlyCreatedOrder?.id || '');
           setIsTrackingOpen(true);
         }}
+        onOpenCustomerAuth={openAuthModal}
         onToggleAdmin={() => {
           if (isAdmin) {
             setIsAdminView(!isAdminView);
@@ -304,6 +308,16 @@ function AppContent() {
         initialOrderId={trackingOrderId}
       />
 
+      {/* Customer Account & Order Status Modal */}
+      <CustomerAuthModal
+        isOpen={isAuthModalOpen}
+        onClose={closeAuthModal}
+        onTrackOrder={(orderId) => {
+          setTrackingOrderId(orderId);
+          setIsTrackingOpen(true);
+        }}
+      />
+
       {/* Discrete Administrator Login Modal (Never linked visibly to customers) */}
       <AdminLoginModal
         isOpen={isAdminLoginModalOpen}
@@ -320,9 +334,11 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <CartProvider>
-        <AppContent />
-      </CartProvider>
+      <CustomerProvider>
+        <CartProvider>
+          <AppContent />
+        </CartProvider>
+      </CustomerProvider>
     </AuthProvider>
   );
 }
