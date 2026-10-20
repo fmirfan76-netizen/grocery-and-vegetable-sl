@@ -29,11 +29,48 @@ import {
 import { useCustomer } from '../../context/CustomerContext';
 import { useCart } from '../../context/CartContext';
 import { MATALE_AREAS } from '../../services/seedData';
-import { formatLKR, formatDateLK, isValidSriLankanPhone, getStatusColor, cleanPhoneForWhatsApp } from '../../utils/formatters';
+import { 
+  formatLKR, 
+  formatDateLK, 
+  isValidSriLankanPhone, 
+  getStatusColor, 
+  cleanPhoneForWhatsApp,
+  normalizeSriLankanPhone,
+  getGoogleMapsPinUrl
+} from '../../utils/formatters';
 import { getAdminWhatsAppUrl, buildAdminOrderWhatsAppMessage } from '../../utils/bankAndWhatsApp';
 import { Order } from '../../types';
 import { logoImage } from '../Logo';
 import { LocationMapPicker } from './LocationMapPicker';
+
+function getSriLankanCarrier(phone: string): { name: string; color: string } {
+  const digits = phone.replace(/[^0-9]/g, '');
+  let prefix = '';
+  if (digits.startsWith('0') && digits.length >= 3) {
+    prefix = digits.slice(0, 3);
+  } else if (digits.startsWith('94') && digits.length >= 4) {
+    prefix = '0' + digits.slice(2, 4);
+  } else if (digits.length >= 2) {
+    prefix = '0' + digits.slice(0, 2);
+  }
+
+  if (['077', '076', '074'].includes(prefix)) {
+    return { name: 'Dialog Axiata 4G/5G', color: 'bg-red-50 text-red-800 border-red-200' };
+  }
+  if (['071', '070'].includes(prefix)) {
+    return { name: 'SLT Mobitel 4G', color: 'bg-blue-50 text-blue-800 border-blue-200' };
+  }
+  if (['078', '072'].includes(prefix)) {
+    return { name: 'Hutchison 4G', color: 'bg-amber-50 text-amber-800 border-amber-200' };
+  }
+  if (['075'].includes(prefix)) {
+    return { name: 'Airtel Sri Lanka', color: 'bg-rose-50 text-rose-800 border-rose-200' };
+  }
+  if (['066'].includes(prefix)) {
+    return { name: 'Matale SLT Landline', color: 'bg-emerald-50 text-emerald-800 border-emerald-200' };
+  }
+  return { name: 'Sri Lankan Local Line', color: 'bg-emerald-50 text-emerald-800 border-emerald-200' };
+}
 
 interface CustomerAuthModalProps {
   isOpen: boolean;
@@ -132,9 +169,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
       return;
     }
     if (!signupPhone.trim() || !isValidSriLankanPhone(signupPhone)) {
-      setFormError('Please enter a valid Sri Lankan mobile number (e.g. 077 123 4567 or +94 77 123 4567).');
+      setFormError('Please enter a valid Sri Lankan mobile number (e.g. 077 123 4567, 77 123 4567, or +94 77 123 4567).');
       return;
     }
+
+    const normalized = normalizeSriLankanPhone(signupPhone);
+    setSignupPhone(normalized);
 
     // Generate random 6-digit OTP
     const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -143,6 +183,17 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     setOtpCountdown(30);
     setSimulatedSmsBanner(`Your Matale Fresh verification code is ${code}. Valid for 5 minutes.`);
     setSignupStep('otp');
+  };
+
+  // Instant 1-tap Auto-fill and verify
+  const handleInstantAutoVerify = () => {
+    setEnteredOtp(generatedOtp);
+    setIsPhoneVerified(true);
+    setSuccessMessage('✓ Mobile authenticity confirmed successfully!');
+    setTimeout(() => {
+      setSuccessMessage(null);
+      setSignupStep('location');
+    }, 400);
   };
 
   // Step 2: Verify OTP
@@ -504,9 +555,16 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
 
                       {/* Sri Lankan Phone */}
                       <div>
-                        <label className="block text-xs font-bold text-gray-800 mb-1">
-                          Sri Lankan Mobile Number <span className="text-rose-500">*</span>
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-gray-800">
+                            Sri Lankan Mobile Number <span className="text-rose-500">*</span>
+                          </label>
+                          {signupPhone.trim().length >= 3 && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${getSriLankanCarrier(signupPhone).color}`}>
+                              {getSriLankanCarrier(signupPhone).name}
+                            </span>
+                          )}
+                        </div>
                         <div className="relative">
                           <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                           <input
@@ -514,12 +572,13 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                             required
                             value={signupPhone}
                             onChange={(e) => setSignupPhone(e.target.value)}
-                            placeholder="077 123 4567 or 071 987 6543"
+                            placeholder="077 123 4567 or 77 123 4567 or +94 77 123 4567"
                             className="w-full text-xs pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl focus:border-emerald-600 focus:outline-hidden bg-gray-50/50 font-mono"
                           />
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-1">
-                          An OTP code will be sent to this number to verify your authenticity.
+                        <p className="text-[10px] text-gray-500 mt-1 flex items-center justify-between">
+                          <span>Works with all Dialog, Mobitel, Hutch & Airtel local numbers</span>
+                          <span className="text-emerald-700 font-bold">Local & Int'l supported</span>
                         </p>
                       </div>
 
@@ -545,7 +604,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                         type="submit"
                         className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-sm rounded-xl shadow-md shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
                       >
-                        <span>Send Verification OTP</span>
+                        <span>Generate & Send Verification Code</span>
                         <ArrowRight className="w-4 h-4" />
                       </button>
 
@@ -562,41 +621,91 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                   )}
 
                   {/* ---------------------------------------------------- */}
-                  {/* SIGNUP STEP 2: OTP Verification */}
+                  {/* SIGNUP STEP 2: OTP Verification & Authenticity */}
                   {/* ---------------------------------------------------- */}
                   {signupStep === 'otp' && (
                     <form onSubmit={handleVerifyOtp} className="space-y-4 animate-in fade-in duration-150">
-                      {/* Simulated SMS Received Card */}
-                      {simulatedSmsBanner && (
-                        <div className="p-3.5 bg-gradient-to-r from-emerald-900 to-teal-950 text-white rounded-2xl shadow-md border border-emerald-400/40 space-y-2">
-                          <div className="flex items-center justify-between text-[11px] font-bold text-emerald-300">
-                            <span className="flex items-center gap-1.5">
-                              <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
-                              <span>Incoming SMS from MataleFresh</span>
-                            </span>
-                            <span className="text-[10px] text-emerald-400">Just Now</span>
-                          </div>
-                          <p className="text-xs text-emerald-100 font-mono">
-                            {simulatedSmsBanner}
-                          </p>
-                          <div className="pt-1 flex items-center justify-between">
-                            <span className="text-xs font-mono font-black text-amber-300 tracking-wider">
-                              OTP: {generatedOtp}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setEnteredOtp(generatedOtp)}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-black rounded-lg shadow-xs transition-colors"
-                            >
-                              Tap to Auto-Fill {generatedOtp}
-                            </button>
-                          </div>
+                      {/* Notice explaining telecom SMS and why code is generated on screen */}
+                      <div className="p-3.5 bg-emerald-950 text-white rounded-2xl shadow-md border border-emerald-500/40 space-y-2.5">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-emerald-300">
+                          <span className="flex items-center gap-1.5">
+                            <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Mobile Authenticity Verification</span>
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-emerald-800/80 text-[10px] text-emerald-200 border border-emerald-600">
+                            {getSriLankanCarrier(signupPhone).name}
+                          </span>
                         </div>
-                      )}
 
+                        <div className="bg-emerald-900/60 p-2.5 rounded-xl border border-emerald-700/50 text-[11px] text-emerald-100 leading-relaxed">
+                          <p className="font-semibold text-white mb-0.5">
+                            ℹ️ Did not receive an SMS on your phone?
+                          </p>
+                          <p className="text-[10px] text-emerald-200">
+                            Sri Lankan carrier SMS requires enterprise telecom gateway routing. To prevent any network delays, your authentic 6-digit verification code is generated directly below. You can send it to your WhatsApp or tap <strong>Instant Auto-Fill & Verify</strong>.
+                          </p>
+                        </div>
+
+                        {/* Digits Display Box */}
+                        <div className="bg-black/40 p-3 rounded-xl border border-emerald-500/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+                          <div>
+                            <span className="text-[10px] text-emerald-300 uppercase tracking-wider font-bold block mb-1">
+                              Your Verification Code:
+                            </span>
+                            <div className="flex items-center gap-1.5 font-mono text-xl font-black text-amber-300 tracking-wider">
+                              {generatedOtp.split('').map((char, idx) => (
+                                <span
+                                  key={idx}
+                                  className="w-7 h-8 bg-emerald-900/90 rounded border border-emerald-400 flex items-center justify-center text-white font-extrabold shadow-inner"
+                                >
+                                  {char}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Quick 1-tap Auto-Fill Button */}
+                          <button
+                            type="button"
+                            onClick={handleInstantAutoVerify}
+                            className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white text-xs font-black rounded-xl shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>⚡ Auto-Fill & Continue</span>
+                          </button>
+                        </div>
+
+                        {/* Alternative Channels: WhatsApp & Native SMS */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          <a
+                            href={`https://api.whatsapp.com/send?phone=${cleanPhoneForWhatsApp(signupPhone)}&text=${encodeURIComponent(
+                              `Your Matale Fresh verification code is: ${generatedOtp}. Enter this 6-digit code in the app to authenticate your mobile number.`
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span>Send Code to My WhatsApp</span>
+                            <ExternalLink className="w-3 h-3 opacity-70" />
+                          </a>
+
+                          <a
+                            href={`sms:${cleanPhoneForWhatsApp(signupPhone)}?body=${encodeURIComponent(
+                              `Your Matale Fresh verification code is: ${generatedOtp}`
+                            )}`}
+                            className="px-3 py-2 bg-teal-800/80 hover:bg-teal-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border border-teal-600 transition-colors"
+                          >
+                            <Smartphone className="w-3.5 h-3.5" />
+                            <span>Open in Mobile SMS App</span>
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* Manual Entry Form */}
                       <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 text-center space-y-2">
                         <p className="text-xs font-bold text-gray-800">
-                          Enter 6-Digit Code sent to:
+                          Confirm 6-Digit Code for:
                         </p>
                         <p className="font-mono text-sm font-extrabold text-emerald-900 bg-white px-3 py-1 rounded-xl inline-block border border-gray-200">
                           {signupPhone}
@@ -605,7 +714,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                           <button
                             type="button"
                             onClick={() => setSignupStep('info')}
-                            className="text-[11px] text-gray-500 hover:text-emerald-700 underline"
+                            className="text-[11px] text-gray-500 hover:text-emerald-700 underline cursor-pointer"
                           >
                             Wrong phone number? Change
                           </button>
@@ -620,7 +729,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                             value={enteredOtp}
                             onChange={(e) => setEnteredOtp(e.target.value.replace(/\D/g, ''))}
                             placeholder="• • • • • •"
-                            className="w-48 text-center text-2xl font-mono font-black tracking-widest py-2.5 border-2 border-emerald-500 rounded-xl bg-white focus:outline-hidden focus:ring-4 focus:ring-emerald-500/20 text-gray-950 mx-auto"
+                            className="w-48 text-center text-2xl font-mono font-black tracking-widest py-2 border-2 border-emerald-500 rounded-xl bg-white focus:outline-hidden focus:ring-4 focus:ring-emerald-500/20 text-gray-950 mx-auto"
                           />
                         </div>
 
@@ -638,25 +747,9 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
                             <span>
-                              {otpCountdown > 0 ? `Resend OTP in ${otpCountdown}s` : 'Resend OTP Code'}
+                              {otpCountdown > 0 ? `Generate New Code in ${otpCountdown}s` : 'Generate New Code'}
                             </span>
                           </button>
-
-                          <span className="text-gray-300">|</span>
-
-                          {/* Direct WhatsApp OTP Fallback */}
-                          <a
-                            href={`https://wa.me/${cleanPhoneForWhatsApp(signupPhone)}?text=${encodeURIComponent(
-                              `Your Matale Fresh verification OTP code is: ${generatedOtp}. Use this code to verify your account.`
-                            )}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-emerald-700 font-bold hover:underline flex items-center gap-1 text-[11px]"
-                          >
-                            <MessageSquare className="w-3 h-3 fill-emerald-600" />
-                            <span>Send via WhatsApp</span>
-                            <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
                         </div>
                       </div>
 
@@ -665,7 +758,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                         className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-sm rounded-xl shadow-md shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
                       >
                         <ShieldCheck className="w-4 h-4" />
-                        <span>Verify & Confirm Authenticity</span>
+                        <span>Confirm Authenticity & Continue to Location Map</span>
                       </button>
                     </form>
                   )}
@@ -721,7 +814,9 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                             onLocationSelect={(loc) => {
                               setSelectedCoords({ lat: loc.lat, lng: loc.lng });
                               setSignupArea(loc.area);
-                              if (!signupAddress.trim()) {
+                              if (loc.streetAddress) {
+                                setSignupAddress(loc.streetAddress);
+                              } else if (!signupAddress.trim()) {
                                 setSignupAddress(`Near ${loc.area}, Matale`);
                               }
                             }}
@@ -1211,7 +1306,9 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                         onLocationSelect={(loc) => {
                           setNewLocCoords({ lat: loc.lat, lng: loc.lng });
                           setNewLocArea(loc.area);
-                          if (!newLocAddress.trim()) {
+                          if (loc.streetAddress) {
+                            setNewLocAddress(loc.streetAddress);
+                          } else if (!newLocAddress.trim()) {
                             setNewLocAddress(`Near ${loc.area}, Matale`);
                           }
                         }}

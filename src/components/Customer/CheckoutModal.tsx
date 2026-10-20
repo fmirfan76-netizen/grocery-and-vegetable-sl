@@ -629,7 +629,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       setCheckoutCoords({ lat: loc.lat, lng: loc.lng });
                       const matched = MATALE_AREAS.find((a) => a.name === loc.area);
                       if (matched) setSelectedArea(matched);
-                      if (!address.trim()) {
+                      if (loc.streetAddress) {
+                        setAddress(loc.streetAddress);
+                      } else if (!address.trim()) {
                         setAddress(`Near ${loc.area}, Matale`);
                       }
                       setShowCheckoutMap(false);
