@@ -14,7 +14,8 @@ import {
   Building2, 
   Copy, 
   Check, 
-  ExternalLink 
+  ExternalLink,
+  Map 
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
@@ -22,6 +23,7 @@ import { useCustomer } from '../../context/CustomerContext';
 import { createOrder } from '../../services/orderService';
 import { formatLKR, isValidSriLankanPhone, cleanPhoneForWhatsApp } from '../../utils/formatters';
 import { MATALE_AREAS } from '../../services/seedData';
+import { LocationMapPicker } from './LocationMapPicker';
 import { 
   BankAccountDetails, 
   DEFAULT_BANK_ACCOUNTS, 
@@ -69,6 +71,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [address, setAddress] = useState('');
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
   const [saveLocationForFuture, setSaveLocationForFuture] = useState(true);
+  const [showCheckoutMap, setShowCheckoutMap] = useState(false);
+  const [checkoutCoords, setCheckoutCoords] = useState<{ lat?: number; lng?: number }>({});
   const [bankAccounts, setBankAccounts] = useState<BankAccountDetails[]>(DEFAULT_BANK_ACCOUNTS);
   const [selectedBankIndex, setSelectedBankIndex] = useState(0);
   const [copiedBankAcc, setCopiedBankAcc] = useState(false);
@@ -89,6 +93,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         if (customer.currentLocation.area) {
           const matchedArea = MATALE_AREAS.find((a) => a.name === customer.currentLocation?.area);
           if (matchedArea) setSelectedArea(matchedArea);
+        }
+        if (customer.currentLocation.latitude && customer.currentLocation.longitude) {
+          setCheckoutCoords({
+            lat: customer.currentLocation.latitude,
+            lng: customer.currentLocation.longitude,
+          });
         }
         if (customer.currentLocation.deliveryInstructions && !deliveryInstructions) {
           setDeliveryInstructions(customer.currentLocation.deliveryInstructions);
@@ -198,6 +208,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             area: selectedArea.name,
             streetAddress: address.trim(),
             deliveryInstructions: deliveryInstructions.trim(),
+            latitude: checkoutCoords.lat,
+            longitude: checkoutCoords.lng,
             setAsCurrent: true,
           }).catch(() => {});
         }
@@ -206,11 +218,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           fullName: customerName.trim(),
           phone: phone.trim(),
           pin: '1234',
+          isVerified: true,
           initialLocation: {
             area: selectedArea.name,
             streetAddress: address.trim(),
             label: 'Home',
             deliveryInstructions: deliveryInstructions.trim(),
+            latitude: checkoutCoords.lat,
+            longitude: checkoutCoords.lng,
           },
         }).catch(() => {});
       }
@@ -587,11 +602,42 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
             </div>
 
-            {/* Address */}
-            <div>
-              <label className="block text-xs font-bold text-gray-800 mb-1">
-                Street Address & Landmarks <span className="text-rose-500">*</span>
-              </label>
+            {/* Address & Interactive Map Option */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-gray-800">
+                  Street Address & Landmarks <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowCheckoutMap(!showCheckoutMap)}
+                  className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 hover:underline cursor-pointer"
+                >
+                  <Map className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>{showCheckoutMap ? 'Hide Map' : '🗺️ Mark on Map'}</span>
+                </button>
+              </div>
+
+              {showCheckoutMap && (
+                <div className="mb-2">
+                  <LocationMapPicker
+                    compact={true}
+                    initialArea={selectedArea.name}
+                    initialLat={checkoutCoords.lat}
+                    initialLng={checkoutCoords.lng}
+                    onLocationSelect={(loc) => {
+                      setCheckoutCoords({ lat: loc.lat, lng: loc.lng });
+                      const matched = MATALE_AREAS.find((a) => a.name === loc.area);
+                      if (matched) setSelectedArea(matched);
+                      if (!address.trim()) {
+                        setAddress(`Near ${loc.area}, Matale`);
+                      }
+                      setShowCheckoutMap(false);
+                    }}
+                  />
+                </div>
+              )}
+
               <textarea
                 required
                 rows={2}
@@ -600,6 +646,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 placeholder="e.g., No. 42, Mandandawela Road, Near St. Thomas' College ground..."
                 className="w-full text-xs p-3 border border-gray-200 rounded-xl focus:border-emerald-600 focus:outline-hidden bg-gray-50/50"
               />
+              {checkoutCoords.lat && checkoutCoords.lng && (
+                <p className="text-[10px] text-emerald-700 font-mono flex items-center gap-1">
+                  <Check className="w-3 h-3 text-emerald-600" />
+                  <span>Pinned GPS Coordinates: {checkoutCoords.lat.toFixed(4)}, {checkoutCoords.lng.toFixed(4)}</span>
+                </p>
+              )}
             </div>
 
             {/* Optional Delivery Instructions */}

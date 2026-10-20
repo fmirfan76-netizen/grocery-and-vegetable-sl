@@ -24,11 +24,14 @@ interface CustomerContextType {
     fullName: string;
     phone: string;
     pin?: string;
+    isVerified?: boolean;
     initialLocation?: {
       area: string;
       streetAddress: string;
       label?: string;
       deliveryInstructions?: string;
+      latitude?: number;
+      longitude?: number;
     };
   }) => Promise<{ success: boolean; error?: string; user?: CustomerUser }>;
   login: (phone: string, pin?: string) => Promise<{ success: boolean; error?: string; user?: CustomerUser }>;
@@ -38,6 +41,8 @@ interface CustomerContextType {
     area: string;
     streetAddress: string;
     deliveryInstructions?: string;
+    latitude?: number;
+    longitude?: number;
     setAsCurrent?: boolean;
   }) => Promise<void>;
   selectLocation: (locationId: string) => Promise<void>;
@@ -95,11 +100,14 @@ export const CustomerProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     fullName: string;
     phone: string;
     pin?: string;
+    isVerified?: boolean;
     initialLocation?: {
       area: string;
       streetAddress: string;
       label?: string;
       deliveryInstructions?: string;
+      latitude?: number;
+      longitude?: number;
     };
   }) => {
     setIsLoading(true);
@@ -149,6 +157,8 @@ export const CustomerProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     area: string;
     streetAddress: string;
     deliveryInstructions?: string;
+    latitude?: number;
+    longitude?: number;
     setAsCurrent?: boolean;
   }) => {
     if (!customer) return;

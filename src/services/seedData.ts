@@ -1,17 +1,17 @@
 import { Product, Supplier, MataleArea } from '../types';
 
 export const MATALE_AREAS: MataleArea[] = [
-  { name: 'Matale Town (Central)', deliveryFee: 200, estMinutes: '30-45 mins' },
-  { name: 'Mandandawela', deliveryFee: 220, estMinutes: '35-50 mins' },
-  { name: 'Hulangamuwa', deliveryFee: 220, estMinutes: '35-50 mins' },
-  { name: 'Aluvihare', deliveryFee: 280, estMinutes: '45-60 mins' },
-  { name: 'Palapathwela', deliveryFee: 320, estMinutes: '50-70 mins' },
-  { name: 'Kohombiliwela', deliveryFee: 250, estMinutes: '40-55 mins' },
-  { name: 'Ukuwela Road', deliveryFee: 300, estMinutes: '45-65 mins' },
-  { name: 'Kawdupelella', deliveryFee: 350, estMinutes: '60-80 mins' },
-  { name: 'Rattota Road', deliveryFee: 300, estMinutes: '50-70 mins' },
-  { name: 'Nagolla', deliveryFee: 240, estMinutes: '40-50 mins' },
-  { name: 'Weragama', deliveryFee: 240, estMinutes: '40-55 mins' },
+  { name: 'Matale Town (Central)', deliveryFee: 200, estMinutes: '30-45 mins', lat: 7.4675, lng: 80.6234 },
+  { name: 'Mandandawela', deliveryFee: 220, estMinutes: '35-50 mins', lat: 7.4580, lng: 80.6260 },
+  { name: 'Hulangamuwa', deliveryFee: 220, estMinutes: '35-50 mins', lat: 7.4760, lng: 80.6200 },
+  { name: 'Aluvihare', deliveryFee: 280, estMinutes: '45-60 mins', lat: 7.4890, lng: 80.6280 },
+  { name: 'Palapathwela', deliveryFee: 320, estMinutes: '50-70 mins', lat: 7.5120, lng: 80.6400 },
+  { name: 'Kohombiliwela', deliveryFee: 250, estMinutes: '40-55 mins', lat: 7.4520, lng: 80.6350 },
+  { name: 'Ukuwela Road', deliveryFee: 300, estMinutes: '45-65 mins', lat: 7.4320, lng: 80.6450 },
+  { name: 'Kawdupelella', deliveryFee: 350, estMinutes: '60-80 mins', lat: 7.5300, lng: 80.6480 },
+  { name: 'Rattota Road', deliveryFee: 300, estMinutes: '50-70 mins', lat: 7.4720, lng: 80.6550 },
+  { name: 'Nagolla', deliveryFee: 240, estMinutes: '40-50 mins', lat: 7.4610, lng: 80.6150 },
+  { name: 'Weragama', deliveryFee: 240, estMinutes: '40-55 mins', lat: 7.4690, lng: 80.6320 },
 ];
 
 export const INITIAL_SUPPLIERS: Supplier[] = [

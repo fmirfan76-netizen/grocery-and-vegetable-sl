@@ -130,6 +130,8 @@ export interface MataleArea {
   name: string;
   deliveryFee: number;
   estMinutes: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface SavedLocation {
@@ -148,6 +150,8 @@ export interface CustomerUser {
   fullName: string;
   phone: string;
   pin?: string;
+  isVerified?: boolean;
+  verifiedAt?: string;
   savedLocations: SavedLocation[];
   currentLocation?: SavedLocation;
   createdAt: string;

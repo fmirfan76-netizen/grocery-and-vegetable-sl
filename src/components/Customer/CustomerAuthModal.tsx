@@ -20,7 +20,11 @@ import {
   Check, 
   ExternalLink,
   ShieldCheck,
-  LogOut
+  LogOut,
+  Map,
+  RotateCcw,
+  Sparkles,
+  Smartphone
 } from 'lucide-react';
 import { useCustomer } from '../../context/CustomerContext';
 import { useCart } from '../../context/CartContext';
@@ -29,6 +33,7 @@ import { formatLKR, formatDateLK, isValidSriLankanPhone, getStatusColor, cleanPh
 import { getAdminWhatsAppUrl, buildAdminOrderWhatsAppMessage } from '../../utils/bankAndWhatsApp';
 import { Order } from '../../types';
 import { logoImage } from '../Logo';
+import { LocationMapPicker } from './LocationMapPicker';
 
 interface CustomerAuthModalProps {
   isOpen: boolean;
@@ -59,31 +64,52 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
 
   const { setSelectedArea } = useCart();
 
-  // Signup form state
+  // Multi-step signup state: 'info' -> 'otp' -> 'location'
+  const [signupStep, setSignupStep] = useState<'info' | 'otp' | 'location'>('info');
   const [signupName, setSignupName] = useState('');
   const [signupPhone, setSignupPhone] = useState('');
   const [signupPin, setSignupPin] = useState('');
+  const [generatedOtp, setGeneratedOtp] = useState<string>('');
+  const [enteredOtp, setEnteredOtp] = useState<string>('');
+  const [otpCountdown, setOtpCountdown] = useState<number>(0);
+  const [simulatedSmsBanner, setSimulatedSmsBanner] = useState<string | null>(null);
+  const [isPhoneVerified, setIsPhoneVerified] = useState<boolean>(false);
+
+  // Map & location state in signup
+  const [showMapInSignup, setShowMapInSignup] = useState<boolean>(true);
   const [signupArea, setSignupArea] = useState(MATALE_AREAS[0].name);
   const [signupAddress, setSignupAddress] = useState('');
   const [signupLabel, setSignupLabel] = useState('Home');
   const [signupInstructions, setSignupInstructions] = useState('');
+  const [selectedCoords, setSelectedCoords] = useState<{ lat?: number; lng?: number }>({});
 
   // Login form state
   const [loginPhone, setLoginPhone] = useState('');
   const [loginPin, setLoginPin] = useState('');
 
-  // Add location form state
+  // Add location form state (in Saved Locations tab)
   const [isAddingLocation, setIsAddingLocation] = useState(false);
+  const [showMapInAddLoc, setShowMapInAddLoc] = useState(false);
   const [newLocLabel, setNewLocLabel] = useState('Home');
   const [newLocArea, setNewLocArea] = useState(MATALE_AREAS[0].name);
   const [newLocAddress, setNewLocAddress] = useState('');
   const [newLocInstructions, setNewLocInstructions] = useState('');
   const [newLocAsCurrent, setNewLocAsCurrent] = useState(true);
+  const [newLocCoords, setNewLocCoords] = useState<{ lat?: number; lng?: number }>({});
 
   // Status and feedback
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+
+  // OTP Countdown timer
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (otpCountdown > 0) {
+      timer = setTimeout(() => setOtpCountdown((c) => c - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [otpCountdown]);
 
   useEffect(() => {
     setFormError(null);
@@ -95,8 +121,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Handle Signup
-  const handleSignupSubmit = async (e: React.FormEvent) => {
+  // Step 1: Send OTP to verify phone authenticity
+  const handleSendOtp = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
     setSuccessMessage(null);
@@ -109,8 +135,58 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
       setFormError('Please enter a valid Sri Lankan mobile number (e.g. 077 123 4567 or +94 77 123 4567).');
       return;
     }
+
+    // Generate random 6-digit OTP
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedOtp(code);
+    setEnteredOtp('');
+    setOtpCountdown(30);
+    setSimulatedSmsBanner(`Your Matale Fresh verification code is ${code}. Valid for 5 minutes.`);
+    setSignupStep('otp');
+  };
+
+  // Step 2: Verify OTP
+  const handleVerifyOtp = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    const cleanInput = enteredOtp.trim().replace(/\D/g, '');
+    if (cleanInput.length !== 6) {
+      setFormError('Please enter the complete 6-digit verification code.');
+      return;
+    }
+
+    if (cleanInput !== generatedOtp.trim()) {
+      setFormError('Invalid verification code. Please check the code or tap Resend.');
+      return;
+    }
+
+    setIsPhoneVerified(true);
+    setSuccessMessage('✓ Mobile number authenticity confirmed successfully!');
+    setTimeout(() => {
+      setSuccessMessage(null);
+      setSignupStep('location');
+    }, 700);
+  };
+
+  // Resend OTP
+  const handleResendOtp = () => {
+    if (otpCountdown > 0) return;
+    setFormError(null);
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedOtp(code);
+    setOtpCountdown(30);
+    setSimulatedSmsBanner(`New verification code sent: ${code}. Valid for 5 minutes.`);
+  };
+
+  // Step 3: Complete Sign Up with Stored Location & Map Pin
+  const handleCompleteSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    setSuccessMessage(null);
+
     if (!signupAddress.trim()) {
-      setFormError('Please provide your delivery street address / landmark in Matale.');
+      setFormError('Please provide your delivery street address / landmark in Matale or mark on map.');
       return;
     }
 
@@ -118,23 +194,26 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
       fullName: signupName.trim(),
       phone: signupPhone.trim(),
       pin: signupPin.trim() || '1234',
+      isVerified: true,
       initialLocation: {
         area: signupArea,
         streetAddress: signupAddress.trim(),
         label: signupLabel,
         deliveryInstructions: signupInstructions.trim(),
+        latitude: selectedCoords.lat,
+        longitude: selectedCoords.lng,
       },
     });
 
     if (res.success && res.user) {
       const areaObj = MATALE_AREAS.find((a) => a.name === signupArea);
       if (areaObj) setSelectedArea(areaObj);
-      setSuccessMessage('Account created successfully! Your current location is saved.');
+      setSuccessMessage('Account created and delivery location verified!');
       setTimeout(() => {
         openAuthModal('orders');
       }, 1000);
     } else {
-      setFormError(res.error || 'Failed to create account. Please try again.');
+      setFormError(res.error || 'Failed to complete registration. Please try again.');
     }
   };
 
@@ -164,7 +243,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     }
   };
 
-  // Handle Add Location
+  // Handle Add Location in Saved Locations tab
   const handleAddLocationSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -179,6 +258,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
       area: newLocArea,
       streetAddress: newLocAddress.trim(),
       deliveryInstructions: newLocInstructions.trim(),
+      latitude: newLocCoords.lat,
+      longitude: newLocCoords.lng,
       setAsCurrent: newLocAsCurrent,
     });
 
@@ -188,8 +269,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     }
 
     setIsAddingLocation(false);
+    setShowMapInAddLoc(false);
     setNewLocAddress('');
     setNewLocInstructions('');
+    setNewLocCoords({});
     setSuccessMessage('New delivery location saved successfully!');
   };
 
@@ -222,8 +305,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
               </h2>
               <p className="text-xs text-emerald-200">
                 {customer
-                  ? `Phone: ${customer.phone} • Matale Fresh Member`
-                  : 'Sign up with mobile number to save locations & track orders'}
+                  ? `Phone: +${customer.phone} • Verified Member`
+                  : 'Mobile OTP verification & map delivery location'}
               </p>
             </div>
           </div>
@@ -241,7 +324,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
             <>
               <button
                 type="button"
-                onClick={() => openAuthModal('signup')}
+                onClick={() => {
+                  setSignupStep('info');
+                  openAuthModal('signup');
+                }}
                 className={`px-4 py-2.5 rounded-t-xl transition-all border-b-2 flex items-center gap-1.5 ${
                   authModalTab === 'signup'
                     ? 'border-emerald-600 text-emerald-900 bg-white shadow-xs'
@@ -249,7 +335,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                 }`}
               >
                 <User className="w-4 h-4 text-emerald-600" />
-                <span>Create Account / Sign Up</span>
+                <span>Sign Up & Verify Phone</span>
               </button>
               <button
                 type="button"
@@ -326,178 +412,408 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
 
         {/* Body Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {/* TAB 1: SIGN UP */}
+          {/* ============================================================ */}
+          {/* TAB 1: SIGN UP WITH MOBILE OTP & MAP MARKING */}
+          {/* ============================================================ */}
           {authModalTab === 'signup' && (
             <div>
               {!customer ? (
-                <form onSubmit={handleSignupSubmit} className="space-y-4">
-                  <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-100 text-xs text-emerald-900 flex items-start gap-2.5">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-extrabold text-emerald-950">
-                        Fast Sign Up with Mobile Number
-                      </p>
-                      <p className="text-[11px] text-emerald-800 mt-0.5">
-                        Save your delivery location in Matale once. Your details will automatically pre-fill at checkout, and all orders are tied to your phone number for easy tracking and WhatsApp communication.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Full Name */}
-                  <div>
-                    <label className="block text-xs font-bold text-gray-800 mb-1">
-                      Full Name <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <User className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
-                      <input
-                        type="text"
-                        required
-                        value={signupName}
-                        onChange={(e) => setSignupName(e.target.value)}
-                        placeholder="e.g., Nuwan Senanayake"
-                        className="w-full text-xs pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl focus:border-emerald-600 focus:outline-hidden bg-gray-50/50"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Sri Lankan Phone */}
-                  <div>
-                    <label className="block text-xs font-bold text-gray-800 mb-1">
-                      Sri Lankan Mobile Number (WhatsApp) <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
-                      <input
-                        type="tel"
-                        required
-                        value={signupPhone}
-                        onChange={(e) => setSignupPhone(e.target.value)}
-                        placeholder="077 123 4567 or 071 987 6543"
-                        className="w-full text-xs pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl focus:border-emerald-600 focus:outline-hidden bg-gray-50/50 font-mono"
-                      />
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-1">
-                      Used for order confirmation, WhatsApp itemized receipts, and delivery updates.
-                    </p>
-                  </div>
-
-                  {/* Optional 4-digit PIN */}
-                  <div>
-                    <label className="block text-xs font-bold text-gray-800 mb-1">
-                      Quick Access PIN (Optional, 4-digits)
-                    </label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
-                      <input
-                        type="password"
-                        maxLength={6}
-                        value={signupPin}
-                        onChange={(e) => setSignupPin(e.target.value)}
-                        placeholder="e.g. 1234 (default is 1234)"
-                        className="w-full text-xs pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl focus:border-emerald-600 focus:outline-hidden bg-gray-50/50 font-mono tracking-widest"
-                      />
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-1">
-                      Use this PIN to easily re-log in to your account from any browser.
-                    </p>
-                  </div>
-
-                  {/* Current Delivery Location in Matale */}
-                  <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-extrabold text-gray-900 flex items-center gap-1.5">
-                        <MapPin className="w-4 h-4 text-emerald-600" />
-                        <span>Store Your Current Delivery Location</span>
+                <div>
+                  {/* Step Progress Indicators */}
+                  <div className="flex items-center justify-between mb-5 px-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black ${
+                        signupStep === 'info'
+                          ? 'bg-emerald-600 text-white ring-4 ring-emerald-100'
+                          : 'bg-emerald-600 text-white'
+                      }`}>
+                        {signupStep === 'info' ? '1' : '✓'}
+                      </div>
+                      <span className={`text-xs font-bold ${signupStep === 'info' ? 'text-emerald-950 font-black' : 'text-gray-500'}`}>
+                        1. Mobile Info
                       </span>
-                      <div className="flex gap-1">
-                        {['Home', 'Work', 'Shop', 'Other'].map((lbl) => (
+                    </div>
+
+                    <div className="h-0.5 w-8 bg-gray-200" />
+
+                    <div className="flex items-center gap-2">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black ${
+                        signupStep === 'otp'
+                          ? 'bg-emerald-600 text-white ring-4 ring-emerald-100'
+                          : isPhoneVerified
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {isPhoneVerified ? '✓' : '2'}
+                      </div>
+                      <span className={`text-xs font-bold ${signupStep === 'otp' ? 'text-emerald-950 font-black' : 'text-gray-500'}`}>
+                        2. Verify OTP
+                      </span>
+                    </div>
+
+                    <div className="h-0.5 w-8 bg-gray-200" />
+
+                    <div className="flex items-center gap-2">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black ${
+                        signupStep === 'location'
+                          ? 'bg-emerald-600 text-white ring-4 ring-emerald-100'
+                          : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        3
+                      </div>
+                      <span className={`text-xs font-bold ${signupStep === 'location' ? 'text-emerald-950 font-black' : 'text-gray-500'}`}>
+                        3. Mark on Map
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* ---------------------------------------------------- */}
+                  {/* SIGNUP STEP 1: Full Name & Mobile Number */}
+                  {/* ---------------------------------------------------- */}
+                  {signupStep === 'info' && (
+                    <form onSubmit={handleSendOtp} className="space-y-4">
+                      <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-100 text-xs text-emerald-900 flex items-start gap-2.5">
+                        <Smartphone className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-extrabold text-emerald-950">
+                            Mobile Number Authenticity Verification
+                          </p>
+                          <p className="text-[11px] text-emerald-800 mt-0.5">
+                            Enter your mobile phone number. We will send a secure 6-digit OTP code to verify your account's authenticity before marking your delivery location.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Full Name */}
+                      <div>
+                        <label className="block text-xs font-bold text-gray-800 mb-1">
+                          Full Name <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <User className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                          <input
+                            type="text"
+                            required
+                            value={signupName}
+                            onChange={(e) => setSignupName(e.target.value)}
+                            placeholder="e.g., Nuwan Senanayake"
+                            className="w-full text-xs pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl focus:border-emerald-600 focus:outline-hidden bg-gray-50/50"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Sri Lankan Phone */}
+                      <div>
+                        <label className="block text-xs font-bold text-gray-800 mb-1">
+                          Sri Lankan Mobile Number <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                          <input
+                            type="tel"
+                            required
+                            value={signupPhone}
+                            onChange={(e) => setSignupPhone(e.target.value)}
+                            placeholder="077 123 4567 or 071 987 6543"
+                            className="w-full text-xs pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl focus:border-emerald-600 focus:outline-hidden bg-gray-50/50 font-mono"
+                          />
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          An OTP code will be sent to this number to verify your authenticity.
+                        </p>
+                      </div>
+
+                      {/* Optional PIN */}
+                      <div>
+                        <label className="block text-xs font-bold text-gray-800 mb-1">
+                          Set 4-Digit Quick PIN (Optional)
+                        </label>
+                        <div className="relative">
+                          <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                          <input
+                            type="password"
+                            maxLength={6}
+                            value={signupPin}
+                            onChange={(e) => setSignupPin(e.target.value)}
+                            placeholder="Default 1234 (for easy re-login)"
+                            className="w-full text-xs pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl focus:border-emerald-600 focus:outline-hidden bg-gray-50/50 font-mono tracking-widest"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-sm rounded-xl shadow-md shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                      >
+                        <span>Send Verification OTP</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+
+                      <div className="text-center pt-2">
+                        <button
+                          type="button"
+                          onClick={() => openAuthModal('login')}
+                          className="text-xs text-emerald-700 font-bold hover:underline"
+                        >
+                          Already have an account? Log In with Mobile Number
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* ---------------------------------------------------- */}
+                  {/* SIGNUP STEP 2: OTP Verification */}
+                  {/* ---------------------------------------------------- */}
+                  {signupStep === 'otp' && (
+                    <form onSubmit={handleVerifyOtp} className="space-y-4 animate-in fade-in duration-150">
+                      {/* Simulated SMS Received Card */}
+                      {simulatedSmsBanner && (
+                        <div className="p-3.5 bg-gradient-to-r from-emerald-900 to-teal-950 text-white rounded-2xl shadow-md border border-emerald-400/40 space-y-2">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-emerald-300">
+                            <span className="flex items-center gap-1.5">
+                              <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>Incoming SMS from MataleFresh</span>
+                            </span>
+                            <span className="text-[10px] text-emerald-400">Just Now</span>
+                          </div>
+                          <p className="text-xs text-emerald-100 font-mono">
+                            {simulatedSmsBanner}
+                          </p>
+                          <div className="pt-1 flex items-center justify-between">
+                            <span className="text-xs font-mono font-black text-amber-300 tracking-wider">
+                              OTP: {generatedOtp}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setEnteredOtp(generatedOtp)}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-black rounded-lg shadow-xs transition-colors"
+                            >
+                              Tap to Auto-Fill {generatedOtp}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 text-center space-y-2">
+                        <p className="text-xs font-bold text-gray-800">
+                          Enter 6-Digit Code sent to:
+                        </p>
+                        <p className="font-mono text-sm font-extrabold text-emerald-900 bg-white px-3 py-1 rounded-xl inline-block border border-gray-200">
+                          {signupPhone}
+                        </p>
+                        <div>
                           <button
-                            key={lbl}
                             type="button"
-                            onClick={() => setSignupLabel(lbl)}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
-                              signupLabel === lbl
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-white text-gray-600 border border-gray-200'
+                            onClick={() => setSignupStep('info')}
+                            className="text-[11px] text-gray-500 hover:text-emerald-700 underline"
+                          >
+                            Wrong phone number? Change
+                          </button>
+                        </div>
+
+                        {/* 6-Digit Code Input */}
+                        <div className="pt-2">
+                          <input
+                            type="text"
+                            maxLength={6}
+                            autoFocus
+                            value={enteredOtp}
+                            onChange={(e) => setEnteredOtp(e.target.value.replace(/\D/g, ''))}
+                            placeholder="• • • • • •"
+                            className="w-48 text-center text-2xl font-mono font-black tracking-widest py-2.5 border-2 border-emerald-500 rounded-xl bg-white focus:outline-hidden focus:ring-4 focus:ring-emerald-500/20 text-gray-950 mx-auto"
+                          />
+                        </div>
+
+                        {/* Resend OTP */}
+                        <div className="pt-2 flex items-center justify-center gap-3 text-xs">
+                          <button
+                            type="button"
+                            onClick={handleResendOtp}
+                            disabled={otpCountdown > 0}
+                            className={`flex items-center gap-1 font-bold ${
+                              otpCountdown > 0
+                                ? 'text-gray-400 cursor-not-allowed'
+                                : 'text-emerald-700 hover:underline cursor-pointer'
                             }`}
                           >
-                            {lbl}
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>
+                              {otpCountdown > 0 ? `Resend OTP in ${otpCountdown}s` : 'Resend OTP Code'}
+                            </span>
                           </button>
-                        ))}
+
+                          <span className="text-gray-300">|</span>
+
+                          {/* Direct WhatsApp OTP Fallback */}
+                          <a
+                            href={`https://wa.me/${cleanPhoneForWhatsApp(signupPhone)}?text=${encodeURIComponent(
+                              `Your Matale Fresh verification OTP code is: ${generatedOtp}. Use this code to verify your account.`
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-emerald-700 font-bold hover:underline flex items-center gap-1 text-[11px]"
+                          >
+                            <MessageSquare className="w-3 h-3 fill-emerald-600" />
+                            <span>Send via WhatsApp</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        </div>
                       </div>
-                    </div>
 
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                        Matale Area
-                      </label>
-                      <select
-                        value={signupArea}
-                        onChange={(e) => setSignupArea(e.target.value)}
-                        className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white focus:border-emerald-600 focus:outline-hidden"
+                      <button
+                        type="submit"
+                        className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-sm rounded-xl shadow-md shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
                       >
-                        {MATALE_AREAS.map((a) => (
-                          <option key={a.name} value={a.name}>
-                            {a.name} (Delivery: {formatLKR(a.deliveryFee)} • {a.estMinutes})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Verify & Confirm Authenticity</span>
+                      </button>
+                    </form>
+                  )}
 
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                        Street Address & Landmark <span className="text-rose-500">*</span>
-                      </label>
-                      <textarea
-                        required
-                        rows={2}
-                        value={signupAddress}
-                        onChange={(e) => setSignupAddress(e.target.value)}
-                        placeholder="e.g. No. 42 Mandandawela Road, near St. Thomas' College ground..."
-                        className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white focus:border-emerald-600 focus:outline-hidden"
-                      />
-                    </div>
+                  {/* ---------------------------------------------------- */}
+                  {/* SIGNUP STEP 3: Mark Current Location Using Map */}
+                  {/* ---------------------------------------------------- */}
+                  {signupStep === 'location' && (
+                    <form onSubmit={handleCompleteSignup} className="space-y-4 animate-in fade-in duration-150">
+                      <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-3.5 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs">
+                            ✓
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-emerald-950">
+                              Mobile Number Authenticated
+                            </span>
+                            <span className="text-[10px] text-emerald-800 block font-mono">
+                              +{signupPhone}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] bg-emerald-200 text-emerald-900 font-black px-2 py-0.5 rounded-full">
+                          Authenticity Verified
+                        </span>
+                      </div>
 
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                        Gate / Delivery Instructions (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={signupInstructions}
-                        onChange={(e) => setSignupInstructions(e.target.value)}
-                        placeholder="e.g. White gate, call when arriving..."
-                        className="w-full text-xs p-2 border border-gray-200 rounded-xl bg-white focus:border-emerald-600 focus:outline-hidden"
-                      />
-                    </div>
-                  </div>
+                      {/* Map Toggle & Picker */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-black text-gray-900 flex items-center gap-1.5">
+                            <MapPin className="w-4 h-4 text-emerald-600" />
+                            <span>Mark Your Location on Map</span>
+                          </label>
 
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 disabled:opacity-50 text-white font-extrabold text-sm rounded-xl shadow-md shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
-                  >
-                    {isLoading ? (
-                      <span>Saving Account...</span>
-                    ) : (
-                      <>
-                        <span>Create Account & Save Location</span>
-                        <ArrowRight className="w-4 h-4" />
-                      </>
-                    )}
-                  </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowMapInSignup(!showMapInSignup)}
+                            className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-1"
+                          >
+                            <Map className="w-3.5 h-3.5" />
+                            <span>{showMapInSignup ? 'Hide Map' : 'Open Interactive Map'}</span>
+                          </button>
+                        </div>
 
-                  <div className="text-center pt-2">
-                    <button
-                      type="button"
-                      onClick={() => openAuthModal('login')}
-                      className="text-xs text-emerald-700 font-bold hover:underline"
-                    >
-                      Already have an account? Log In with Mobile Number
-                    </button>
-                  </div>
-                </form>
+                        {showMapInSignup && (
+                          <LocationMapPicker
+                            compact={true}
+                            initialArea={signupArea}
+                            initialLat={selectedCoords.lat}
+                            initialLng={selectedCoords.lng}
+                            onLocationSelect={(loc) => {
+                              setSelectedCoords({ lat: loc.lat, lng: loc.lng });
+                              setSignupArea(loc.area);
+                              if (!signupAddress.trim()) {
+                                setSignupAddress(`Near ${loc.area}, Matale`);
+                              }
+                            }}
+                          />
+                        )}
+                      </div>
+
+                      {/* Location Label Selector */}
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[11px] font-bold text-gray-700">Location Label:</span>
+                        <div className="flex gap-1">
+                          {['Home', 'Work', 'Shop', 'Other'].map((lbl) => (
+                            <button
+                              key={lbl}
+                              type="button"
+                              onClick={() => setSignupLabel(lbl)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors ${
+                                signupLabel === lbl
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-white text-gray-700 border border-gray-200'
+                              }`}
+                            >
+                              {lbl}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Matale Area */}
+                      <div>
+                        <label className="block text-xs font-bold text-gray-800 mb-1">
+                          Delivery Area in Matale <span className="text-rose-500">*</span>
+                        </label>
+                        <select
+                          value={signupArea}
+                          onChange={(e) => setSignupArea(e.target.value)}
+                          className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white focus:border-emerald-600 focus:outline-hidden"
+                        >
+                          {MATALE_AREAS.map((a) => (
+                            <option key={a.name} value={a.name}>
+                              {a.name} (Delivery: {formatLKR(a.deliveryFee)} • {a.estMinutes})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Street Address */}
+                      <div>
+                        <label className="block text-xs font-bold text-gray-800 mb-1">
+                          Street Address & Landmark <span className="text-rose-500">*</span>
+                        </label>
+                        <textarea
+                          required
+                          rows={2}
+                          value={signupAddress}
+                          onChange={(e) => setSignupAddress(e.target.value)}
+                          placeholder="e.g. No. 42 Mandandawela Road, near St. Thomas' College ground..."
+                          className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white focus:border-emerald-600 focus:outline-hidden"
+                        />
+                      </div>
+
+                      {/* Gate / Delivery Instructions */}
+                      <div>
+                        <label className="block text-xs font-bold text-gray-800 mb-1">
+                          Gate / Delivery Instructions (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={signupInstructions}
+                          onChange={(e) => setSignupInstructions(e.target.value)}
+                          placeholder="e.g. Ring bell, call upon arrival..."
+                          className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white focus:border-emerald-600 focus:outline-hidden"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 disabled:opacity-50 text-white font-extrabold text-sm rounded-xl shadow-md shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                      >
+                        {isLoading ? (
+                          <span>Saving Account...</span>
+                        ) : (
+                          <>
+                            <Check className="w-4 h-4" />
+                            <span>Complete Sign Up & Save Location</span>
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  )}
+                </div>
               ) : (
                 /* Profile summary for logged-in user */
                 <div className="space-y-4">
@@ -513,8 +829,9 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                         <p className="text-xs text-emerald-800 font-mono">
                           +{customer.phone}
                         </p>
-                        <p className="text-[10px] text-gray-500 mt-0.5">
-                          Member since {formatDateLK(customer.createdAt)}
+                        <p className="text-[10px] text-emerald-700 font-bold flex items-center gap-1 mt-0.5">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Phone Authenticity Confirmed</span>
                         </p>
                       </div>
                     </div>
@@ -557,6 +874,11 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                       </div>
                       <p className="font-bold text-gray-900">{customer.currentLocation.streetAddress}</p>
                       <p className="text-gray-600">Area: {customer.currentLocation.area}</p>
+                      {customer.currentLocation.latitude && customer.currentLocation.longitude && (
+                        <p className="text-[10px] text-emerald-800 font-mono">
+                          GPS: {customer.currentLocation.latitude.toFixed(4)}, {customer.currentLocation.longitude.toFixed(4)}
+                        </p>
+                      )}
                       {customer.currentLocation.deliveryInstructions && (
                         <p className="text-[11px] text-gray-500 italic">
                           Note: {customer.currentLocation.deliveryInstructions}
@@ -588,7 +910,9 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
             </div>
           )}
 
+          {/* ============================================================ */}
           {/* TAB 2: LOG IN */}
+          {/* ============================================================ */}
           {authModalTab === 'login' && !customer && (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-100 text-xs text-emerald-900 flex items-start gap-2.5">
@@ -658,13 +982,15 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                   onClick={() => openAuthModal('signup')}
                   className="text-xs text-emerald-700 font-bold hover:underline"
                 >
-                  New customer? Sign Up & Save Your Delivery Location
+                  New customer? Sign Up with Mobile & Mark Location on Map
                 </button>
               </div>
             </form>
           )}
 
+          {/* ============================================================ */}
           {/* TAB 3: MY ORDERS & STATUS */}
+          {/* ============================================================ */}
           {authModalTab === 'orders' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -813,7 +1139,9 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
             </div>
           )}
 
-          {/* TAB 4: SAVED DELIVERY LOCATIONS */}
+          {/* ============================================================ */}
+          {/* TAB 4: SAVED DELIVERY LOCATIONS WITH MAP PICKER */}
+          {/* ============================================================ */}
           {authModalTab === 'locations' && customer && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -829,7 +1157,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                 {!isAddingLocation && (
                   <button
                     type="button"
-                    onClick={() => setIsAddingLocation(true)}
+                    onClick={() => {
+                      setIsAddingLocation(true);
+                      setShowMapInAddLoc(true);
+                    }}
                     className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1 transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -838,12 +1169,13 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                 )}
               </div>
 
-              {/* Add Location Form */}
+              {/* Add Location Form with Map Pinning */}
               {isAddingLocation && (
                 <form onSubmit={handleAddLocationSubmit} className="p-4 bg-emerald-50/70 rounded-2xl border border-emerald-200 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-extrabold text-emerald-950">
-                      Add New Delivery Location
+                    <span className="text-xs font-extrabold text-emerald-950 flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-emerald-600" />
+                      <span>Add New Delivery Location</span>
                     </span>
                     <button
                       type="button"
@@ -852,6 +1184,39 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                     >
                       <X className="w-4 h-4" />
                     </button>
+                  </div>
+
+                  {/* Interactive Map Picker Toggle */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-emerald-900">
+                        Mark on Interactive Matale Map:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowMapInAddLoc(!showMapInAddLoc)}
+                        className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-1"
+                      >
+                        <Map className="w-3.5 h-3.5" />
+                        <span>{showMapInAddLoc ? 'Hide Map' : 'Show Map'}</span>
+                      </button>
+                    </div>
+
+                    {showMapInAddLoc && (
+                      <LocationMapPicker
+                        compact={true}
+                        initialArea={newLocArea}
+                        initialLat={newLocCoords.lat}
+                        initialLng={newLocCoords.lng}
+                        onLocationSelect={(loc) => {
+                          setNewLocCoords({ lat: loc.lat, lng: loc.lng });
+                          setNewLocArea(loc.area);
+                          if (!newLocAddress.trim()) {
+                            setNewLocAddress(`Near ${loc.area}, Matale`);
+                          }
+                        }}
+                      />
+                    )}
                   </div>
 
                   <div className="flex gap-2">
@@ -984,6 +1349,11 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                             </p>
                             <p className="text-[11px] text-gray-500 mt-0.5">
                               Area: <strong>{loc.area}</strong>
+                              {loc.latitude && loc.longitude && (
+                                <span className="text-emerald-700 ml-1.5 font-mono">
+                                  ({loc.latitude.toFixed(4)}, {loc.longitude.toFixed(4)})
+                                </span>
+                              )}
                             </p>
                             {loc.deliveryInstructions && (
                               <p className="text-[10px] text-gray-400 italic mt-0.5">

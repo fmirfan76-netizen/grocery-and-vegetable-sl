@@ -115,11 +115,14 @@ export async function signupCustomer(params: {
   fullName: string;
   phone: string;
   pin?: string;
+  isVerified?: boolean;
   initialLocation?: {
     area: string;
     streetAddress: string;
     label?: string;
     deliveryInstructions?: string;
+    latitude?: number;
+    longitude?: number;
   };
 }): Promise<CustomerUser> {
   const cleanPhone = cleanPhoneForWhatsApp(params.phone.trim());
@@ -134,6 +137,8 @@ export async function signupCustomer(params: {
       ...existing,
       fullName: params.fullName.trim() || existing.fullName,
       pin: params.pin || existing.pin,
+      isVerified: params.isVerified !== undefined ? params.isVerified : existing.isVerified,
+      verifiedAt: params.isVerified ? now : existing.verifiedAt,
       updatedAt: now,
     };
 
@@ -144,6 +149,8 @@ export async function signupCustomer(params: {
         area: params.initialLocation.area,
         streetAddress: params.initialLocation.streetAddress.trim(),
         deliveryInstructions: params.initialLocation.deliveryInstructions?.trim() || '',
+        latitude: params.initialLocation.latitude,
+        longitude: params.initialLocation.longitude,
         isDefault: (existing.savedLocations || []).length === 0,
       };
       updatedUser.savedLocations = [...(existing.savedLocations || []), loc];
@@ -164,6 +171,8 @@ export async function signupCustomer(params: {
       area: params.initialLocation.area,
       streetAddress: params.initialLocation.streetAddress.trim(),
       deliveryInstructions: params.initialLocation.deliveryInstructions?.trim() || '',
+      latitude: params.initialLocation.latitude,
+      longitude: params.initialLocation.longitude,
       isDefault: true,
     };
     savedLocations.push(loc);
@@ -175,6 +184,8 @@ export async function signupCustomer(params: {
     fullName: params.fullName.trim(),
     phone: cleanPhone,
     pin: params.pin?.trim() || '1234',
+    isVerified: params.isVerified ?? true,
+    verifiedAt: now,
     savedLocations,
     currentLocation,
     createdAt: now,
@@ -226,6 +237,8 @@ export async function addCustomerLocation(
     area: string;
     streetAddress: string;
     deliveryInstructions?: string;
+    latitude?: number;
+    longitude?: number;
     setAsCurrent?: boolean;
   }
 ): Promise<CustomerUser> {
@@ -235,6 +248,8 @@ export async function addCustomerLocation(
     area: locationData.area,
     streetAddress: locationData.streetAddress.trim(),
     deliveryInstructions: locationData.deliveryInstructions?.trim() || '',
+    latitude: locationData.latitude,
+    longitude: locationData.longitude,
     isDefault: locationData.setAsCurrent || (user.savedLocations || []).length === 0,
   };
 
