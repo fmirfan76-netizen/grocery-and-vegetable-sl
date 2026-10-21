@@ -95,6 +95,9 @@ export interface Order {
   customerId: string;
   customerName: string;
   phone: string;
+  customerEmail?: string;
+  emailSent?: boolean;
+  emailSentTo?: string;
   deliveryAddress: string;
   area: string;
   deliveryInstructions?: string;

@@ -17,8 +17,8 @@ interface CustomerContextType {
   customerOrders: Order[];
   ordersLoading: boolean;
   isAuthModalOpen: boolean;
-  authModalTab: 'login' | 'signup' | 'orders' | 'locations';
-  openAuthModal: (tab?: 'login' | 'signup' | 'orders' | 'locations') => void;
+  authModalTab: 'login' | 'signup' | 'orders' | 'locations' | 'profile';
+  openAuthModal: (tab?: 'login' | 'signup' | 'orders' | 'locations' | 'profile') => void;
   closeAuthModal: () => void;
   signup: (params: {
     fullName: string;
@@ -58,12 +58,16 @@ export const CustomerProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
-  const [authModalTab, setAuthModalTab] = useState<'login' | 'signup' | 'orders' | 'locations'>('login');
+  const [authModalTab, setAuthModalTab] = useState<'login' | 'signup' | 'orders' | 'locations' | 'profile'>('login');
 
-  const openAuthModal = useCallback((tab: 'login' | 'signup' | 'orders' | 'locations' = 'login') => {
-    setAuthModalTab(tab);
+  const openAuthModal = useCallback((tab?: 'login' | 'signup' | 'orders' | 'locations' | 'profile') => {
+    if (tab) {
+      setAuthModalTab(tab);
+    } else {
+      setAuthModalTab(customer ? 'profile' : 'login');
+    }
     setIsAuthModalOpen(true);
-  }, []);
+  }, [customer]);
 
   const closeAuthModal = useCallback(() => {
     setIsAuthModalOpen(false);

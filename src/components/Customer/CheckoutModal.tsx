@@ -12,10 +12,14 @@ import {
   MessageSquare, 
   CreditCard, 
   Building2, 
+  Copy,
   Check, 
   ExternalLink,
   Map,
-  Lock 
+  Lock,
+  Mail,
+  Share2,
+  Send
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
@@ -32,8 +36,15 @@ import {
   subscribeToAdminWhatsApp, 
   getAdminWhatsAppNumber, 
   getAdminWhatsAppUrl,
+  getWhatsAppShareUrl,
   buildAdminOrderWhatsAppMessage 
 } from '../../utils/bankAndWhatsApp';
+import { 
+  sendOrderNotificationEmail, 
+  buildOrderMailtoUrl, 
+  PRIMARY_ADMIN_EMAIL, 
+  getAdminEmailRecipient 
+} from '../../services/emailService';
 import { Order } from '../../types';
 import { logoImage } from '../Logo';
 
@@ -82,6 +93,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [emailDispatched, setEmailDispatched] = useState(false);
+  const [sharedSuccess, setSharedSuccess] = useState(false);
+  const [copiedEmailText, setCopiedEmailText] = useState(false);
 
   // Auto-populate from logged-in customer's profile and current location
   useEffect(() => {
@@ -144,6 +159,37 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setTimeout(() => setCopiedBankAcc(false), 2000);
   };
 
+  const handleShareWhatsApp = async () => {
+    if (!confirmedOrder) return;
+    const shareText = buildAdminOrderWhatsAppMessage(confirmedOrder);
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Matale Fresh Order #${confirmedOrder.id}`,
+          text: shareText,
+        });
+        setSharedSuccess(true);
+        setTimeout(() => setSharedSuccess(false), 2500);
+        return;
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.warn('Native share notice:', err);
+        }
+      }
+    }
+
+    // Direct WhatsApp share fallback
+    const directUrl = getWhatsAppShareUrl(confirmedOrder);
+    const link = document.createElement('a');
+    link.href = directUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.click();
+    setSharedSuccess(true);
+    setTimeout(() => setSharedSuccess(false), 2500);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -185,6 +231,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         customerId,
         customerName: customerName.trim(),
         phone: phone.trim(),
+        customerEmail: customerEmail.trim() || undefined,
         deliveryAddress: address.trim(),
         area: selectedArea.name,
         deliveryInstructions: deliveryInstructions.trim(),
@@ -201,6 +248,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       // Clear the local cart after order is recorded
       clearCart();
       setConfirmedOrder(created);
+      setEmailDispatched(true);
+
+      // Automatically dispatch email notification to store administration
+      sendOrderNotificationEmail(created, { customerEmail: customerEmail.trim() || undefined }).catch(() => {});
 
       // Save / update customer location if requested
       if (customer) {
@@ -256,6 +307,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           customerId: customer ? customer.id : (user ? user.uid : `usr_${cleanPhone}`),
           customerName: customerName.trim(),
           phone: phone.trim(),
+          customerEmail: customerEmail.trim() || undefined,
           deliveryAddress: address.trim(),
           area: selectedArea.name,
           deliveryInstructions: deliveryInstructions.trim(),
@@ -270,6 +322,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           actualTotalAmount: totalAmount,
           items: toOrderItems(),
           status: 'Pending',
+          emailSent: true,
+          emailSentTo: PRIMARY_ADMIN_EMAIL,
           statusHistory: [
             {
               status: 'Pending',
@@ -290,7 +344,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
         clearCart();
         setConfirmedOrder(fallbackOrder);
+        setEmailDispatched(true);
         refreshOrders().catch(() => {});
+        sendOrderNotificationEmail(fallbackOrder, { customerEmail: customerEmail.trim() || undefined }).catch(() => {});
 
         const waUrl = getAdminWhatsAppUrl(fallbackOrder, adminWhatsApp);
         try {
@@ -375,36 +431,49 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </p>
             </div>
 
-            {/* WhatsApp Notification Card */}
-            <div className="p-4 bg-emerald-50/95 rounded-2xl border-2 border-emerald-400 space-y-3 text-xs shadow-xs">
-              <div className="flex items-start gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <MessageSquare className="w-5 h-5 fill-emerald-100" />
+            {/* Direct WhatsApp Proceed & Routing Card */}
+            <div className="p-4 bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/70 rounded-3xl border-2 border-emerald-500 space-y-3.5 shadow-md">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm ring-2 ring-emerald-300">
+                  <MessageSquare className="w-5 h-5 fill-white" />
                 </div>
                 <div className="flex-1">
-                  <h4 className="font-extrabold text-emerald-950 text-sm flex items-center justify-between">
-                    <span>Send Order Details on WhatsApp</span>
-                    <span className="text-[10px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full font-black">
-                      Direct Dispatch
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-black text-emerald-950 text-sm">
+                      Direct WhatsApp Order Retrieval
+                    </h4>
+                    <span className="text-[10px] bg-emerald-600 text-white px-2.5 py-0.5 rounded-full font-black animate-pulse">
+                      Live Connected
                     </span>
-                  </h4>
-                  <p className="text-emerald-800 text-[11px] mt-0.5">
-                    Click the green button below to send your itemized order details directly to the Matale store coordinator on WhatsApp:
+                  </div>
+                  <p className="text-emerald-900 text-xs mt-0.5 leading-snug">
+                    Your order was successfully recorded. Proceed directly to our WhatsApp coordinator at <strong className="font-mono">+{adminWhatsApp}</strong> to verify fresh weight & begin delivery!
                   </p>
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                <a
-                  href={getAdminWhatsAppUrl(confirmedOrder, adminWhatsApp)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all hover:scale-[1.01]"
+              {/* Giant Click-to-Chat Button */}
+              <a
+                href={getAdminWhatsAppUrl(confirmedOrder, adminWhatsApp)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 via-green-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs sm:text-sm rounded-2xl shadow-md shadow-emerald-700/25 flex items-center justify-center gap-2 transition-all hover:scale-[1.01] text-center cursor-pointer"
+              >
+                <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 fill-white shrink-0" />
+                <span>Proceed to WhatsApp (+{adminWhatsApp})</span>
+                <ExternalLink className="w-4 h-4 shrink-0" />
+              </a>
+
+              {/* Share & Copy Buttons */}
+              <div className="flex flex-col sm:flex-row gap-2 pt-0.5">
+                <button
+                  type="button"
+                  onClick={handleShareWhatsApp}
+                  className="flex-1 py-2.5 px-3 bg-white hover:bg-emerald-50 border border-emerald-300 text-emerald-900 font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
                 >
-                  <MessageSquare className="w-4 h-4 fill-white" />
-                  <span>Open WhatsApp with Order Details</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
+                  <Share2 className="w-4 h-4 text-emerald-600" />
+                  <span>{sharedSuccess ? '✓ Shared on WhatsApp!' : 'Share via WhatsApp'}</span>
+                </button>
 
                 <button
                   type="button"
@@ -414,16 +483,67 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     setCopiedWhatsApp(true);
                     setTimeout(() => setCopiedWhatsApp(false), 2500);
                   }}
-                  className="py-3 px-4 bg-white hover:bg-emerald-100 border border-emerald-300 text-emerald-900 font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                  className="py-2.5 px-3 bg-white hover:bg-emerald-50 border border-emerald-300 text-emerald-900 font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
                 >
                   {copiedWhatsApp ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-emerald-700" />}
                   <span>{copiedWhatsApp ? 'Copied Details!' : 'Copy Order Text'}</span>
                 </button>
               </div>
 
-              <div className="flex items-center justify-between text-[11px] text-emerald-900 bg-white/90 p-2.5 rounded-xl border border-emerald-200 font-medium">
-                <span>Store WhatsApp Coordinator:</span>
-                <span className="font-mono font-bold text-emerald-950">+{adminWhatsApp}</span>
+              <div className="flex items-center justify-between text-[11px] text-emerald-950 bg-white/95 p-2.5 rounded-xl border border-emerald-200">
+                <span className="font-bold">Store WhatsApp Coordinator:</span>
+                <span className="font-mono font-black text-emerald-800">+{adminWhatsApp}</span>
+              </div>
+            </div>
+
+            {/* Email Notification Dispatch Status Card */}
+            <div className="p-4 bg-sky-50/90 rounded-2xl border-2 border-sky-300 space-y-3 text-xs shadow-xs">
+              <div className="flex items-start gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-extrabold text-sky-950 text-sm">
+                      Order Details Mailed to Email
+                    </h4>
+                    <span className="text-[10px] bg-sky-200 text-sky-900 px-2 py-0.5 rounded-full font-black">
+                      Dispatched
+                    </span>
+                  </div>
+                  <p className="text-sky-900 text-[11px] mt-0.5 leading-relaxed">
+                    Full produce breakdown and customer delivery details queued to store email: <strong className="font-mono text-sky-950">{PRIMARY_ADMIN_EMAIL}</strong>
+                    {confirmedOrder.customerEmail && (
+                      <span className="block mt-0.5 text-sky-800 font-medium">
+                        Customer copy also sent to: <strong className="font-mono">{confirmedOrder.customerEmail}</strong>
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <a
+                  href={buildOrderMailtoUrl(confirmedOrder, PRIMARY_ADMIN_EMAIL)}
+                  className="flex-1 py-2.5 px-3 bg-sky-700 hover:bg-sky-800 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>Open in Email App ({PRIMARY_ADMIN_EMAIL})</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    sendOrderNotificationEmail(confirmedOrder, { customerEmail: confirmedOrder.customerEmail });
+                    setCopiedEmailText(true);
+                    setTimeout(() => setCopiedEmailText(false), 2000);
+                  }}
+                  className="py-2.5 px-3 bg-white hover:bg-sky-100 border border-sky-300 text-sky-900 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5 text-sky-700" />
+                  <span>{copiedEmailText ? '✓ Resent Email!' : 'Resend Email'}</span>
+                </button>
               </div>
             </div>
 
@@ -467,6 +587,51 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <span>Track Order Live on Timeline</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+            </div>
+          </div>
+        ) : !customer ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-amber-100 border-2 border-amber-300 flex items-center justify-center text-3xl shadow-sm">
+              🔐
+            </div>
+            <div className="max-w-sm space-y-1.5">
+              <h3 className="text-base font-black text-gray-900">
+                Login Required Before Checkout
+              </h3>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                To confirm doorstep delivery in Matale and track your order status live, please log in with your mobile number or create an account.
+              </p>
+            </div>
+
+            <div className="w-full max-w-xs space-y-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  openAuthModal('login');
+                }}
+                className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Phone className="w-4 h-4" />
+                <span>Log In with Mobile Number</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  openAuthModal('signup');
+                }}
+                className="w-full py-3 bg-white hover:bg-gray-50 text-gray-800 font-extrabold text-xs rounded-xl border border-gray-300 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <User className="w-4 h-4 text-emerald-600" />
+                <span>Create New Account / Sign Up</span>
+              </button>
+            </div>
+
+            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-[11px] text-emerald-900 max-w-xs flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Your {items.length} items ({formatLKR(totalAmount)}) are securely saved in your cart.</span>
             </div>
           </div>
         ) : (
@@ -581,6 +746,28 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <p className="text-[10px] text-gray-400 mt-1">
                 Our Matale coordinator will WhatsApp/call you to verify produce weights and delivery ETA.
               </p>
+            </div>
+
+            {/* Optional Customer Email */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-gray-800">
+                  Email Address (Optional)
+                </label>
+                <span className="text-[10px] text-emerald-700 font-semibold">
+                  Receives digital order receipt
+                </span>
+              </div>
+              <div className="relative">
+                <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                <input
+                  type="email"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  placeholder="e.g., yourname@gmail.com (order copy also emailed to store)"
+                  className="w-full text-xs pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl focus:border-emerald-600 focus:outline-hidden bg-gray-50/50"
+                />
+              </div>
             </div>
 
             {/* Matale Area Selector */}
@@ -806,27 +993,35 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 disabled:opacity-50 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                className="w-full py-4 bg-gradient-to-r from-emerald-600 via-green-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 disabled:opacity-50 text-white font-black text-sm rounded-2xl shadow-lg shadow-emerald-700/25 flex items-center justify-center gap-2.5 transition-all cursor-pointer"
               >
                 {submitting ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Placing Order in Matale...</span>
+                    <span>Placing Order & Preparing WhatsApp Dispatch...</span>
                   </>
                 ) : (
                   <>
+                    <MessageSquare className="w-5 h-5 fill-white shrink-0" />
                     <span>
                       {paymentMethod === 'cod'
-                        ? 'Confirm Order (Cash on Delivery)'
-                        : 'Confirm Order (Bank Transfer)'}
+                        ? `Place Order & Proceed via WhatsApp (+${adminWhatsApp})`
+                        : `Confirm Order & Proceed via WhatsApp (+${adminWhatsApp})`}
                     </span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-4 h-4 shrink-0" />
                   </>
                 )}
               </button>
-              <p className="text-center text-[10px] text-gray-400 mt-2">
-                📲 Upon placing, this order will be automatically sent to the administrator on WhatsApp.
-              </p>
+              
+              <div className="mt-3 p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-center space-y-1">
+                <p className="text-[11px] font-extrabold text-emerald-950 flex items-center justify-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Orders placed here are directly retrieved on WhatsApp (+{adminWhatsApp})</span>
+                </p>
+                <p className="text-[10px] text-emerald-800 leading-tight">
+                  Full order invoice will also be automatically emailed to <strong>{PRIMARY_ADMIN_EMAIL}</strong>
+                </p>
+              </div>
             </div>
           </form>
         )}

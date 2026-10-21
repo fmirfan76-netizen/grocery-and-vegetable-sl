@@ -11,7 +11,7 @@ interface HeaderProps {
   onLanguageChange: (lang: SupportedLanguage) => void;
   onOpenCart: () => void;
   onOpenTracking: () => void;
-  onOpenCustomerAuth: (tab?: 'login' | 'signup' | 'orders' | 'locations') => void;
+  onOpenCustomerAuth: (tab?: 'login' | 'signup' | 'orders' | 'locations' | 'profile') => void;
   onToggleAdmin: () => void;
   isAdminView: boolean;
   pendingOrdersCount?: number;
@@ -102,9 +102,9 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Customer Account & Saved Locations Button */}
           {customer ? (
             <button
-              onClick={() => onOpenCustomerAuth('orders')}
+              onClick={() => onOpenCustomerAuth('profile')}
               className="flex items-center gap-1.5 text-xs font-bold text-emerald-950 bg-emerald-50 hover:bg-emerald-100/80 px-2.5 sm:px-3 py-2 rounded-xl transition-all border border-emerald-200 cursor-pointer shadow-xs"
-              title="My Account, Saved Delivery Locations & Orders"
+              title="My Profile, Orders History & Saved Locations"
             >
               <div className="w-5 h-5 rounded-full bg-emerald-700 text-white flex items-center justify-center text-[10px] font-black shrink-0">
                 {customer.fullName.charAt(0).toUpperCase()}

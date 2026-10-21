@@ -7,12 +7,14 @@ import {
   updateDoc, 
   onSnapshot, 
   query, 
+  where,
   orderBy, 
   Unsubscribe 
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { handleFirestoreError, OperationType } from '../firebase/errorHandler';
 import { Order, OrderStatus } from '../types';
+import { sendOrderNotificationEmail, PRIMARY_ADMIN_EMAIL } from './emailService';
 
 const ORDERS_COLLECTION = 'orders';
 const LOCAL_ORDERS_KEY = 'matale_local_orders';
@@ -61,6 +63,7 @@ export async function createOrder(
     customerId: String(orderData.customerId || `guest_${Date.now()}`),
     customerName: String(orderData.customerName || 'Customer'),
     phone: String(orderData.phone || ''),
+    customerEmail: orderData.customerEmail ? String(orderData.customerEmail).trim() : undefined,
     deliveryAddress: String(orderData.deliveryAddress || ''),
     area: String(orderData.area || 'Matale'),
     deliveryInstructions: orderData.deliveryInstructions ? String(orderData.deliveryInstructions) : '',
@@ -75,6 +78,8 @@ export async function createOrder(
     actualTotalAmount: totalAmount,
     items: sanitizedItems,
     status: 'Pending',
+    emailSent: true,
+    emailSentTo: PRIMARY_ADMIN_EMAIL,
     statusHistory: [
       {
         status: 'Pending',
@@ -100,7 +105,12 @@ export async function createOrder(
     console.warn('Local storage order caching note:', storageErr);
   }
 
-  // 2. Persist to Firestore with automatic fallback for network latency/drop
+  // 2. Automatically dispatch order notification email to store admin (and customer if provided)
+  sendOrderNotificationEmail(cleanOrder, { customerEmail: cleanOrder.customerEmail }).catch((err) => {
+    console.warn('Background order email dispatch note:', err);
+  });
+
+  // 3. Persist to Firestore with automatic fallback for network latency/drop
   try {
     const orderRef = doc(db, ORDERS_COLLECTION, orderId);
     await setDoc(orderRef, cleanOrder);
@@ -324,3 +334,112 @@ export async function updateOrderAdminAdjustments(
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
 }
+
+/**
+ * Fetches order history for a logged-in customer directly from Firestore based on their UID / customerId
+ */
+export async function fetchCustomerOrdersByUid(customerUid: string): Promise<Order[]> {
+  const path = ORDERS_COLLECTION;
+  const foundOrders: Order[] = [];
+  const seenIds = new Set<string>();
+
+  if (!customerUid || !customerUid.trim()) {
+    return [];
+  }
+
+  const cleanUid = customerUid.trim();
+
+  // 1. Query Firestore orders collection where customerId == customerUid
+  try {
+    const q = query(
+      collection(db, path),
+      where('customerId', '==', cleanUid),
+      orderBy('createdAt', 'desc')
+    );
+    const snap = await getDocs(q);
+    snap.forEach((d) => {
+      const ord = d.data() as Order;
+      if (!seenIds.has(ord.id)) {
+        seenIds.add(ord.id);
+        foundOrders.push(ord);
+      }
+    });
+  } catch (error) {
+    console.warn('Firestore query by customerId error, trying fallback without index:', error);
+    try {
+      const qFallback = query(
+        collection(db, path),
+        where('customerId', '==', cleanUid)
+      );
+      const snap2 = await getDocs(qFallback);
+      snap2.forEach((d) => {
+        const ord = d.data() as Order;
+        if (!seenIds.has(ord.id)) {
+          seenIds.add(ord.id);
+          foundOrders.push(ord);
+        }
+      });
+    } catch (e) {
+      console.warn('Fallback Firestore query by UID warning:', e);
+    }
+  }
+
+  // 2. Local storage fallback merge
+  try {
+    const localRaw = localStorage.getItem(LOCAL_ORDERS_KEY);
+    if (localRaw) {
+      const localList: Order[] = JSON.parse(localRaw);
+      for (const ord of localList) {
+        if (!seenIds.has(ord.id) && (ord.customerId === cleanUid || (ord.customerId && ord.customerId.includes(cleanUid)))) {
+          seenIds.add(ord.id);
+          foundOrders.push(ord);
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return foundOrders.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+}
+
+/**
+ * Subscribes in real-time to a customer's order history from Firestore based on their customer UID
+ */
+export function subscribeToCustomerOrdersByUid(
+  customerUid: string,
+  onOrdersChange: (orders: Order[]) => void
+): Unsubscribe {
+  const path = ORDERS_COLLECTION;
+  if (!customerUid || !customerUid.trim()) {
+    return () => {};
+  }
+  const cleanUid = customerUid.trim();
+
+  try {
+    const q = query(
+      collection(db, path),
+      where('customerId', '==', cleanUid)
+    );
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const orders: Order[] = [];
+        snapshot.forEach((docSnap) => {
+          orders.push(docSnap.data() as Order);
+        });
+        orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        onOrdersChange(orders);
+      },
+      (error) => {
+        console.warn('Real-time customer orders query by UID notice:', error);
+      }
+    );
+  } catch (e) {
+    console.warn('Failed to subscribe to customer orders by UID:', e);
+    return () => {};
+  }
+}
+

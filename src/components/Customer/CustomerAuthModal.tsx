@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   X, 
   User, 
@@ -24,10 +24,22 @@ import {
   Map,
   RotateCcw,
   Sparkles,
-  Smartphone
+  Smartphone,
+  RefreshCw,
+  Database,
+  Calendar,
+  CreditCard,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Hash,
+  Eye,
+  Share2,
+  Mail
 } from 'lucide-react';
 import { useCustomer } from '../../context/CustomerContext';
 import { useCart } from '../../context/CartContext';
+import { useAuth } from '../../context/AuthContext';
 import { MATALE_AREAS } from '../../services/seedData';
 import { 
   formatLKR, 
@@ -38,10 +50,13 @@ import {
   normalizeSriLankanPhone,
   getGoogleMapsPinUrl
 } from '../../utils/formatters';
-import { getAdminWhatsAppUrl, buildAdminOrderWhatsAppMessage } from '../../utils/bankAndWhatsApp';
+import { getAdminWhatsAppUrl, getWhatsAppShareUrl, buildAdminOrderWhatsAppMessage } from '../../utils/bankAndWhatsApp';
+import { buildOrderMailtoUrl, PRIMARY_ADMIN_EMAIL } from '../../services/emailService';
 import { Order } from '../../types';
 import { logoImage } from '../Logo';
 import { LocationMapPicker } from './LocationMapPicker';
+import { getCleanPhoneId } from '../../services/userService';
+import { fetchCustomerOrdersByUid, subscribeToCustomerOrdersByUid } from '../../services/orderService';
 
 function getSriLankanCarrier(phone: string): { name: string; color: string } {
   const digits = phone.replace(/[^0-9]/g, '');
@@ -140,6 +155,64 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+
+  // Customer UID and Firestore Orders
+  const { user } = useAuth();
+  const customerUid = customer?.id || (user?.uid ? user.uid : (customer?.phone ? getCleanPhoneId(customer.phone) : ''));
+  const [firestoreOrders, setFirestoreOrders] = useState<Order[]>([]);
+  const [isFetchingFirestore, setIsFetchingFirestore] = useState<boolean>(false);
+  const [lastFirestoreSync, setLastFirestoreSync] = useState<Date | null>(null);
+  const [copiedUid, setCopiedUid] = useState<boolean>(false);
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(new Set());
+
+  // Direct Firestore order loader for customer UID
+  const loadFirestoreOrders = useCallback(async () => {
+    if (!customerUid) return;
+    setIsFetchingFirestore(true);
+    try {
+      const orders = await fetchCustomerOrdersByUid(customerUid);
+      setFirestoreOrders(orders);
+      setLastFirestoreSync(new Date());
+    } catch (err) {
+      console.warn('Error loading Firestore orders for UID:', customerUid, err);
+    } finally {
+      setIsFetchingFirestore(false);
+    }
+  }, [customerUid]);
+
+  // Real-time listener for customer UID orders
+  useEffect(() => {
+    if (!isOpen || !customerUid) return;
+    loadFirestoreOrders();
+
+    const unsubscribe = subscribeToCustomerOrdersByUid(customerUid, (liveOrders) => {
+      setFirestoreOrders(liveOrders);
+      setLastFirestoreSync(new Date());
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [isOpen, customerUid, loadFirestoreOrders]);
+
+  const toggleOrderExpand = (orderId: string) => {
+    setExpandedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderId)) {
+        next.delete(orderId);
+      } else {
+        next.add(orderId);
+      }
+      return next;
+    });
+  };
+
+  const handleCopyUid = () => {
+    if (!customerUid) return;
+    navigator.clipboard.writeText(customerUid);
+    setCopiedUid(true);
+    setTimeout(() => setCopiedUid(false), 2000);
+  };
 
   // OTP Countdown timer
   useEffect(() => {
@@ -407,6 +480,19 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
             <>
               <button
                 type="button"
+                onClick={() => openAuthModal('profile')}
+                className={`px-3 sm:px-4 py-2.5 rounded-t-xl transition-all border-b-2 flex items-center gap-1.5 ${
+                  authModalTab === 'profile'
+                    ? 'border-emerald-600 text-emerald-900 bg-white shadow-xs'
+                    : 'border-transparent text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                <User className="w-4 h-4 text-emerald-600" />
+                <span>User Profile</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => openAuthModal('orders')}
                 className={`px-3 sm:px-4 py-2.5 rounded-t-xl transition-all border-b-2 flex items-center gap-1.5 ${
                   authModalTab === 'orders'
@@ -415,7 +501,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                 }`}
               >
                 <Package className="w-4 h-4 text-emerald-600" />
-                <span>My Orders ({customerOrders.length})</span>
+                <span>My Orders ({firestoreOrders.length > 0 ? firestoreOrders.length : customerOrders.length})</span>
               </button>
 
               <button
@@ -429,19 +515,6 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
               >
                 <MapPin className="w-4 h-4 text-emerald-600" />
                 <span>Saved Locations ({customer.savedLocations?.length || 0})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => openAuthModal('signup')}
-                className={`px-3 sm:px-4 py-2.5 rounded-t-xl transition-all border-b-2 flex items-center gap-1.5 ${
-                  authModalTab === 'signup'
-                    ? 'border-emerald-600 text-emerald-900 bg-white shadow-xs'
-                    : 'border-transparent text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                <User className="w-4 h-4 text-emerald-600" />
-                <span>My Profile</span>
               </button>
             </>
           )}
@@ -483,10 +556,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
           {/* ============================================================ */}
           {/* TAB 1: SIGN UP WITH MOBILE OTP & MAP MARKING */}
           {/* ============================================================ */}
-          {authModalTab === 'signup' && (
+          {authModalTab === 'signup' && !customer && (
             <div>
-              {!customer ? (
-                <div>
                   {/* Step Progress Indicators */}
                   <div className="flex items-center justify-between mb-5 px-2">
                     <div className="flex items-center gap-2">
@@ -925,100 +996,453 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                       </button>
                     </form>
                   )}
-                </div>
-              ) : (
-                /* Profile summary for logged-in user */
-                <div className="space-y-4">
-                  <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black text-lg shadow-sm">
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* USER PROFILE SECTION WITH FIRESTORE ORDER HISTORY            */}
+          {/* ============================================================ */}
+          {customer && (authModalTab === 'profile' || authModalTab === 'signup') && (
+            <div className="space-y-5">
+              {/* Profile Card */}
+              <div className="p-4 bg-gradient-to-br from-emerald-50 via-teal-50 to-white rounded-2xl border border-emerald-200/80 shadow-xs space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-700 to-teal-600 text-white flex items-center justify-center font-black text-xl shadow-md ring-2 ring-emerald-400/30">
                         {customer.fullName.charAt(0).toUpperCase()}
                       </div>
-                      <div>
-                        <h3 className="font-extrabold text-gray-950 text-sm">
+                      <div className="absolute -bottom-1 -right-1 bg-white p-0.5 rounded-full shadow-xs">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 fill-emerald-100" />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black text-gray-950 text-base">
                           {customer.fullName}
                         </h3>
-                        <p className="text-xs text-emerald-800 font-mono">
-                          +{customer.phone}
-                        </p>
-                        <p className="text-[10px] text-emerald-700 font-bold flex items-center gap-1 mt-0.5">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>Phone Authenticity Confirmed</span>
-                        </p>
+                        <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
+                          Verified Member
+                        </span>
                       </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={logout}
-                      className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Log Out</span>
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 text-center">
-                    <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                      <p className="text-lg font-black text-emerald-950">
-                        {customerOrders.length}
+                      <p className="text-xs text-gray-700 font-mono mt-0.5 flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>+{customer.phone}</span>
                       </p>
-                      <p className="text-[11px] text-gray-500 font-bold">Total Orders Placed</p>
-                    </div>
-                    <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                      <p className="text-lg font-black text-emerald-950">
-                        {customer.savedLocations?.length || 0}
-                      </p>
-                      <p className="text-[11px] text-gray-500 font-bold">Saved Locations</p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${getSriLankanCarrier(customer.phone).color}`}>
+                          {getSriLankanCarrier(customer.phone).name}
+                        </span>
+                        <span className="text-[10px] text-gray-500 font-medium">
+                          Member since {formatDateLK(customer.createdAt)}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {customer.currentLocation && (
-                    <div className="p-4 bg-white rounded-2xl border-2 border-emerald-300 space-y-1 text-xs shadow-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="font-extrabold text-emerald-900 flex items-center gap-1.5">
-                          <MapPin className="w-4 h-4 text-emerald-600" />
-                          <span>Active Current Delivery Location:</span>
-                        </span>
-                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-2 py-0.5 rounded-full">
-                          {customer.currentLocation.label || 'Home'}
-                        </span>
-                      </div>
-                      <p className="font-bold text-gray-900">{customer.currentLocation.streetAddress}</p>
-                      <p className="text-gray-600">Area: {customer.currentLocation.area}</p>
-                      {customer.currentLocation.latitude && customer.currentLocation.longitude && (
-                        <p className="text-[10px] text-emerald-800 font-mono">
-                          GPS: {customer.currentLocation.latitude.toFixed(4)}, {customer.currentLocation.longitude.toFixed(4)}
-                        </p>
-                      )}
-                      {customer.currentLocation.deliveryInstructions && (
-                        <p className="text-[11px] text-gray-500 italic">
-                          Note: {customer.currentLocation.deliveryInstructions}
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={logout}
+                    className="px-3.5 py-2 bg-white hover:bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Log Out</span>
+                  </button>
+                </div>
 
-                  <div className="flex gap-2 pt-2">
+                {/* Customer UID Banner */}
+                <div className="p-3 bg-white rounded-xl border border-emerald-200/90 shadow-xs space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-950 flex items-center gap-1.5">
+                      <Database className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Customer Firestore UID</span>
+                    </span>
                     <button
                       type="button"
-                      onClick={() => openAuthModal('orders')}
-                      className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition-colors"
+                      onClick={handleCopyUid}
+                      className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                      title="Copy Customer UID"
                     >
-                      <Package className="w-4 h-4" />
-                      <span>Check Previous & Current Orders</span>
+                      {copiedUid ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          <span>Copied UID!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3 text-emerald-700" />
+                          <span>Copy UID</span>
+                        </>
+                      )}
                     </button>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 bg-slate-900 text-emerald-400 px-3 py-2 rounded-lg font-mono text-xs font-bold border border-slate-700 select-all">
+                    <span className="truncate">{customerUid || 'Generating UID...'}</span>
+                    <span className="text-[10px] font-semibold text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 shrink-0">
+                      Firestore Key
+                    </span>
+                  </div>
+
+                  <p className="text-[10.5px] text-gray-500 leading-relaxed">
+                    This unique identifier secures your order documents in Cloud Firestore (<span className="font-mono text-emerald-800">customerId == UID</span>). Real-time dispatch, rider live tracking, and historical purchases are synced with this ID.
+                  </p>
+                </div>
+              </div>
+
+              {/* Account Quick Metrics */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="p-3 bg-gray-50/90 rounded-2xl border border-gray-200 text-center">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-1">
+                    <Package className="w-4 h-4" />
+                  </div>
+                  <p className="text-base font-black text-gray-950">
+                    {firestoreOrders.length > 0 ? firestoreOrders.length : customerOrders.length}
+                  </p>
+                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                    Firestore Orders
+                  </p>
+                </div>
+
+                <div className="p-3 bg-gray-50/90 rounded-2xl border border-gray-200 text-center">
+                  <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center mx-auto mb-1">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <p className="text-base font-black text-emerald-950">
+                    {formatLKR(
+                      (firestoreOrders.length > 0 ? firestoreOrders : customerOrders).reduce(
+                        (sum, o) => sum + (o.actualTotalAmount || o.totalAmount || 0),
+                        0
+                      )
+                    )}
+                  </p>
+                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                    Total Spent
+                  </p>
+                </div>
+
+                <div className="p-3 bg-gray-50/90 rounded-2xl border border-gray-200 text-center">
+                  <div className="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center mx-auto mb-1">
+                    <MapPin className="w-4 h-4" />
+                  </div>
+                  <p className="text-base font-black text-gray-950">
+                    {customer.savedLocations?.length || 0}
+                  </p>
+                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                    Saved Locations
+                  </p>
+                </div>
+
+                <div className="p-3 bg-gray-50/90 rounded-2xl border border-gray-200 text-center">
+                  <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-1">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <p className="text-xs font-black text-emerald-800 mt-1">
+                    Verified
+                  </p>
+                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mt-0.5">
+                    OTP Phone Auth
+                  </p>
+                </div>
+              </div>
+
+              {/* Active Delivery Location Card */}
+              {customer.currentLocation && (
+                <div className="p-4 bg-white rounded-2xl border-2 border-emerald-300 space-y-2 text-xs shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-emerald-950 flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-emerald-600" />
+                      <span>Current Active Delivery Address:</span>
+                    </span>
                     <button
                       type="button"
                       onClick={() => openAuthModal('locations')}
-                      className="py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs rounded-xl flex items-center justify-center gap-1 transition-colors"
+                      className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
                     >
-                      <MapPin className="w-4 h-4 text-emerald-700" />
-                      <span>Manage Locations</span>
+                      <span>Manage</span>
+                      <ChevronRight className="w-3 h-3" />
                     </button>
                   </div>
+                  <p className="font-bold text-gray-900 leading-snug">
+                    {customer.currentLocation.streetAddress}
+                  </p>
+                  <p className="text-gray-600 text-[11px]">
+                    Area: <strong className="text-gray-900">{customer.currentLocation.area}</strong>
+                    {customer.currentLocation.latitude && customer.currentLocation.longitude && (
+                      <span className="text-emerald-800 ml-1.5 font-mono">
+                        (GPS: {customer.currentLocation.latitude.toFixed(4)}, {customer.currentLocation.longitude.toFixed(4)})
+                      </span>
+                    )}
+                  </p>
+                  {customer.currentLocation.deliveryInstructions && (
+                    <p className="text-[11px] text-gray-500 italic">
+                      Gate / Rider Note: {customer.currentLocation.deliveryInstructions}
+                    </p>
+                  )}
                 </div>
               )}
+
+              {/* ============================================================ */}
+              {/* FIRESTORE ORDER HISTORY SECTION (BY CUSTOMER UID)             */}
+              {/* ============================================================ */}
+              <div className="space-y-3 pt-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 pb-2.5">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-black text-gray-950 uppercase tracking-wider flex items-center gap-1.5">
+                        <Database className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Firestore Order History</span>
+                      </h4>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>Live Cloud Sync</span>
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      Pulled from Firestore based on customer UID: <span className="font-mono text-emerald-800 font-bold">{customerUid}</span>
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={loadFirestoreOrders}
+                      disabled={isFetchingFirestore}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isFetchingFirestore ? 'animate-spin' : ''}`} />
+                      <span>{isFetchingFirestore ? 'Querying...' : 'Sync Firestore'}</span>
+                    </button>
+                    {lastFirestoreSync && (
+                      <span className="text-[10px] text-gray-400 hidden sm:inline">
+                        Synced {lastFirestoreSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Firestore Orders List */}
+                {isFetchingFirestore && (firestoreOrders.length === 0 && customerOrders.length === 0) ? (
+                  <div className="p-8 text-center space-y-2 bg-gray-50/70 rounded-2xl border border-gray-100">
+                    <RefreshCw className="w-6 h-6 text-emerald-600 animate-spin mx-auto" />
+                    <p className="text-xs font-bold text-gray-700">Connecting to Firestore...</p>
+                    <p className="text-[11px] text-gray-400 font-mono">Querying orders where customerId == {customerUid}</p>
+                  </div>
+                ) : (firestoreOrders.length === 0 && customerOrders.length === 0) ? (
+                  <div className="text-center py-8 px-4 space-y-3 bg-gray-50/80 rounded-2xl border border-gray-100">
+                    <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-xl font-bold">
+                      📦
+                    </div>
+                    <div>
+                      <h5 className="font-black text-gray-950 text-sm">
+                        No Orders Recorded Yet
+                      </h5>
+                      <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1">
+                        When you order fresh vegetables, fruit, or groceries, your orders will be linked to UID <span className="font-mono font-bold text-gray-700">{customerUid}</span> in Firestore and shown here.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                    >
+                      Start Shopping Fresh Items
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {(firestoreOrders.length > 0 ? firestoreOrders : customerOrders).map((ord) => {
+                      const statusConfig = getStatusColor(ord.status);
+                      const isCopied = copiedOrderId === ord.id;
+                      const isExpanded = expandedOrderIds.has(ord.id);
+                      const orderUid = ord.customerId || customerUid;
+
+                      return (
+                        <div
+                          key={ord.id}
+                          className="p-4 bg-white rounded-2xl border border-gray-200/90 hover:border-emerald-300 transition-all shadow-xs space-y-3"
+                        >
+                          {/* Order Header */}
+                          <div className="flex flex-wrap items-start justify-between gap-2 border-b border-gray-100 pb-2.5">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-mono text-sm font-black text-gray-950">
+                                  {ord.id}
+                                </span>
+                                <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${statusConfig.badge}`}>
+                                  {ord.status}
+                                </span>
+                                <span className="text-[10px] font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
+                                  UID: {orderUid}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-gray-500 mt-1">
+                                {formatDateLK(ord.createdAt)} • <span className="font-bold text-gray-700">{ord.area}</span>
+                              </p>
+                            </div>
+
+                            <div className="text-right">
+                              <span className="font-black text-sm text-emerald-950 block">
+                                {formatLKR(ord.actualTotalAmount || ord.totalAmount)}
+                              </span>
+                              <span className="text-[10px] text-gray-500 capitalize inline-block mt-0.5">
+                                {ord.paymentMethod === 'bank_transfer' ? '🏦 Bank Transfer' : '💵 Cash on Delivery'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Address Info */}
+                          <p className="text-xs text-gray-600 flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                            <span className="truncate">{ord.deliveryAddress}</span>
+                          </p>
+
+                          {/* Items Accordion Toggle */}
+                          <div className="bg-gray-50/80 rounded-xl p-2.5 border border-gray-100">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-bold text-gray-800">
+                                {ord.items.length} item{ord.items.length !== 1 ? 's' : ''} in this order
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => toggleOrderExpand(ord.id)}
+                                className="text-emerald-700 font-extrabold text-[11px] hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>{isExpanded ? 'Hide Items' : 'View Item Breakdown'}</span>
+                                {isExpanded ? (
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                ) : (
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+
+                            {/* Collapsible Items Breakdown */}
+                            {isExpanded && (
+                              <div className="mt-2.5 pt-2 border-t border-gray-200/80 space-y-1.5">
+                                {ord.items.map((it, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex items-center justify-between text-xs py-1 px-1 rounded-md hover:bg-white transition-colors"
+                                  >
+                                    <div>
+                                      <p className="font-bold text-gray-900 text-xs">
+                                        {it.productName}
+                                        {it.productNameSi && (
+                                          <span className="text-gray-500 font-normal ml-1">
+                                            ({it.productNameSi})
+                                          </span>
+                                        )}
+                                      </p>
+                                      <p className="text-[10px] text-gray-500">
+                                        {it.quantity} × {formatLKR(it.customerPrice)} / {it.unit}
+                                        {it.supplierId && (
+                                          <span className="ml-1 text-emerald-700 capitalize">• {it.supplierId.replace(/_/g, ' ')}</span>
+                                        )}
+                                      </p>
+                                    </div>
+                                    <span className="font-mono font-bold text-gray-800 text-xs">
+                                      {formatLKR(it.lineTotal || it.customerPrice * it.quantity)}
+                                    </span>
+                                  </div>
+                                ))}
+
+                                <div className="pt-2 border-t border-gray-200 flex items-center justify-between text-[11px] text-gray-600">
+                                  <span>Delivery Fee:</span>
+                                  <span className="font-mono font-bold">{formatLKR(ord.deliveryFee)}</span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs font-black text-gray-950 pt-1">
+                                  <span>Total Order Value:</span>
+                                  <span className="font-mono text-emerald-900">
+                                    {formatLKR(ord.actualTotalAmount || ord.totalAmount)}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {!isExpanded && (
+                              <div className="flex flex-wrap gap-1 mt-1.5 max-h-12 overflow-hidden">
+                                {ord.items.slice(0, 4).map((it, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="inline-block bg-white text-gray-700 text-[10px] px-2 py-0.5 rounded-md border border-gray-200"
+                                  >
+                                    {it.productName} × {it.quantity}
+                                  </span>
+                                ))}
+                                {ord.items.length > 4 && (
+                                  <span className="text-[10px] text-gray-400 self-center">
+                                    +{ord.items.length - 4} more
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Order Actions */}
+                          <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
+                            {onTrackOrder && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onTrackOrder(ord.id);
+                                  onClose();
+                                }}
+                                className="flex-1 min-w-[100px] py-2 px-3 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                              >
+                                <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                                <span>Track Live</span>
+                              </button>
+                            )}
+
+                            <a
+                              href={getAdminWhatsAppUrl(ord)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                              title="Proceed via Owner WhatsApp"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5 fill-white" />
+                              <span>WhatsApp</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+
+                            <a
+                              href={getWhatsAppShareUrl(ord)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                              title="Share invoice with any WhatsApp contact"
+                            >
+                              <Share2 className="w-3.5 h-3.5 text-emerald-700" />
+                              <span>Share</span>
+                            </a>
+
+                            <a
+                              href={buildOrderMailtoUrl(ord, PRIMARY_ADMIN_EMAIL)}
+                              className="py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                              title={`Email order invoice to ${PRIMARY_ADMIN_EMAIL}`}
+                            >
+                              <Mail className="w-3.5 h-3.5 text-amber-700" />
+                              <span>Email</span>
+                            </a>
+
+                            <button
+                              type="button"
+                              onClick={() => handleCopyOrder(ord)}
+                              className="py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                              title="Copy Order Text"
+                            >
+                              {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                              <span>{isCopied ? 'Copied' : 'Copy'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1114,17 +1538,23 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                     Live updates from Matale Pola and Supermarket dispatch
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={refreshOrders}
-                  disabled={ordersLoading}
-                  className="text-[11px] text-emerald-700 font-bold hover:underline"
-                >
-                  {ordersLoading ? 'Refreshing...' : '↻ Refresh'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      loadFirestoreOrders();
+                      refreshOrders();
+                    }}
+                    disabled={ordersLoading || isFetchingFirestore}
+                    className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[11px] font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${ordersLoading || isFetchingFirestore ? 'animate-spin' : ''}`} />
+                    <span>{ordersLoading || isFetchingFirestore ? 'Syncing...' : 'Sync Firestore'}</span>
+                  </button>
+                </div>
               </div>
 
-              {customerOrders.length === 0 ? (
+              {(firestoreOrders.length === 0 && customerOrders.length === 0) ? (
                 <div className="text-center py-10 space-y-3 bg-gray-50/60 rounded-2xl border border-gray-100">
                   <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-2xl font-bold">
                     📦
@@ -1140,14 +1570,14 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
                   >
                     Start Shopping Fresh Items
                   </button>
                 </div>
               ) : (
                 <div className="space-y-3.5">
-                  {customerOrders.map((ord) => {
+                  {(firestoreOrders.length > 0 ? firestoreOrders : customerOrders).map((ord) => {
                     const statusConfig = getStatusColor(ord.status);
                     const isCopied = copiedOrderId === ord.id;
 
@@ -1215,10 +1645,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                                 onTrackOrder(ord.id);
                                 onClose();
                               }}
-                              className="flex-1 py-2 px-3 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                              className="flex-1 min-w-[100px] py-2 px-3 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
                             >
                               <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                              <span>Track Status Live</span>
+                              <span>Track Live</span>
                             </button>
                           )}
 
@@ -1227,10 +1657,31 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                             target="_blank"
                             rel="noopener noreferrer"
                             className="py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                            title="Proceed via Owner WhatsApp"
                           >
                             <MessageSquare className="w-3.5 h-3.5 fill-white" />
-                            <span>WhatsApp Details</span>
+                            <span>WhatsApp</span>
                             <ExternalLink className="w-3 h-3" />
+                          </a>
+
+                          <a
+                            href={getWhatsAppShareUrl(ord)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                            title="Share invoice with any WhatsApp contact"
+                          >
+                            <Share2 className="w-3.5 h-3.5 text-emerald-700" />
+                            <span>Share</span>
+                          </a>
+
+                          <a
+                            href={buildOrderMailtoUrl(ord, PRIMARY_ADMIN_EMAIL)}
+                            className="py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                            title={`Email order invoice to ${PRIMARY_ADMIN_EMAIL}`}
+                          >
+                            <Mail className="w-3.5 h-3.5 text-amber-700" />
+                            <span>Email</span>
                           </a>
 
                           <button

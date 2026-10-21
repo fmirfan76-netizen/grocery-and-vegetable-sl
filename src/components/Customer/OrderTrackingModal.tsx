@@ -14,7 +14,9 @@ import {
   AlertCircle,
   Copy, 
   Check, 
-  Building2 
+  Building2,
+  Share2,
+  Mail 
 } from 'lucide-react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase/config';
@@ -25,8 +27,11 @@ import {
   DEFAULT_BANK_ACCOUNTS, 
   subscribeToBankAccounts, 
   subscribeToAdminWhatsApp, 
-  getAdminWhatsAppNumber 
+  getAdminWhatsAppNumber,
+  getWhatsAppShareUrl,
+  buildAdminOrderWhatsAppMessage 
 } from '../../utils/bankAndWhatsApp';
+import { buildOrderMailtoUrl, PRIMARY_ADMIN_EMAIL } from '../../services/emailService';
 import { logoImage } from '../Logo';
 
 interface OrderTrackingModalProps {
@@ -458,30 +463,52 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                 )}
               </div>
 
-              {/* Quick Actions WhatsApp Support */}
-              <div className="flex flex-wrap gap-2 pt-2">
-                <a
-                  href={`https://wa.me/${cleanPhoneForWhatsApp(adminWhatsApp)}?text=${encodeURIComponent(
-                    `Hello Matale Fresh coordinator, I am sending details regarding Order ${activeOrder.id} (${activeOrder.paymentMethod === 'bank_transfer' ? 'Bank Transfer' : 'Cash on Delivery'}). Customer: ${activeOrder.customerName}.`
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors shadow-xs"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  <span>
-                    {activeOrder.paymentMethod === 'bank_transfer'
-                      ? 'WhatsApp Bank Slip to Admin'
-                      : 'WhatsApp Admin Coordinator'}
-                  </span>
-                </a>
-                <a
-                  href="tel:0662223481"
-                  className="py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  <Phone className="w-4 h-4 text-emerald-700" />
-                  <span>Call 066 222 3481</span>
-                </a>
+              {/* Quick Actions WhatsApp Support & Share */}
+              <div className="space-y-2 pt-2">
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={`https://wa.me/${cleanPhoneForWhatsApp(adminWhatsApp)}?text=${encodeURIComponent(
+                      `Hello Matale Fresh coordinator, I am inquiring regarding Order ${activeOrder.id} (${activeOrder.paymentMethod === 'bank_transfer' ? 'Bank Transfer' : 'Cash on Delivery'}). Customer: ${activeOrder.customerName}.`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors shadow-xs"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>
+                      {activeOrder.paymentMethod === 'bank_transfer'
+                        ? 'WhatsApp Bank Slip to Admin'
+                        : 'WhatsApp Coordinator (+'+cleanPhoneForWhatsApp(adminWhatsApp)+')'}
+                    </span>
+                  </a>
+                  <a
+                    href="tel:0662223481"
+                    className="py-2.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Phone className="w-4 h-4 text-emerald-700" />
+                    <span>Call Store</span>
+                  </a>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={getWhatsAppShareUrl(activeOrder)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 py-2 px-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Share2 className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Share on WhatsApp</span>
+                  </a>
+
+                  <a
+                    href={buildOrderMailtoUrl(activeOrder, PRIMARY_ADMIN_EMAIL)}
+                    className="flex-1 py-2 px-3 bg-sky-50 hover:bg-sky-100 border border-sky-300 text-sky-900 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Mail className="w-3.5 h-3.5 text-sky-700" />
+                    <span>Email Invoice</span>
+                  </a>
+                </div>
               </div>
             </div>
           )}

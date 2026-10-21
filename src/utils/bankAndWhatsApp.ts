@@ -250,3 +250,12 @@ export function getAdminWhatsAppUrl(order: Order, customAdminPhone?: string): st
   const text = buildAdminOrderWhatsAppMessage(order);
   return `https://wa.me/${targetPhone}?text=${encodeURIComponent(text)}`;
 }
+
+/**
+ * Creates generic WhatsApp share URL to share the order invoice with any recipient or group
+ */
+export function getWhatsAppShareUrl(order: Order): string {
+  const text = buildAdminOrderWhatsAppMessage(order);
+  return `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+}
+
